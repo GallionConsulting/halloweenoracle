@@ -1,0 +1,25 @@
+# Crystal Ball - AI Fortune Teller
+# Python 3.10+ recommended
+
+# Speech-to-Text
+faster-whisper>=1.0.0
+
+# Voice Activity Detection (also included in faster-whisper, but explicit)
+silero-vad>=5.0
+
+# Local LLM API
+ollama>=0.3.0
+
+# Text-to-Speech
+piper-tts>=1.2.0
+
+# Audio I/O
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# Optional: For cloud API alternatives
+# anthropic>=0.25.0
+# openai>=1.0.0
+
+# Optional: For LED control
+# pyserial>=3.5

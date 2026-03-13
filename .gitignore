@@ -1,0 +1,19 @@
+# Python virtual environment
+venv/
+
+# Voice model files (large binaries)
+voices/*.onnx
+voices/*.onnx.json
+
+# Test audio files
+test_tts.wav
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env

@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 --version && pip3 --version 2>/dev/null || echo \"pip3 not found\")",
+      "Bash(which ollama:*)",
+      "Bash(which piper:*)",
+      "Bash(dpkg -l | grep -E 'portaudio|ffmpeg' 2>/dev/null || echo \"checking with apt\")",
+      "Bash(nvidia-smi 2>/dev/null || echo \"No NVIDIA GPU detected\"; lscpu | grep \"Model name\")",
+      "Bash(which pip:*)",
+      "Bash(sudo apt:*)",
+      "Bash(which ffmpeg:*)",
+      "Bash(dpkg -l | grep portaudio19-dev)",
+      "Bash(ollama list:*)",
+      "Bash(python3 -m venv venv && source venv/bin/activate && pip install --upgrade pip)",
+      "Bash(source venv/bin/activate && pip install faster-whisper silero-vad ollama piper-tts sounddevice numpy)",
+      "Bash(source venv/bin/activate && python3 -c \"from faster_whisper import WhisperModel; print\\('faster-whisper: OK'\\)\")",
+      "Read(//usr/bin/**)",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/python3 -c \"import faster_whisper; print\\(''OK''\\)\")",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/pip list:*)",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/python3 -c \"from faster_whisper import WhisperModel; print\\('faster-whisper: OK'\\)\")",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/python3 -c \"import ollama; print\\([m.model for m in ollama.list\\(\\).models]\\); print\\('ollama: OK'\\)\")",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/python3 -c \"import sounddevice; print\\(sounddevice.query_devices\\(\\)\\); print\\('sounddevice: OK'\\)\")",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/piper --help 2>&1 | head -20)",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/pip install:*)",
+      "Bash(ollama run:*)",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/piper --help 2>&1 | head -5)",
+      "Bash(echo \"The spirits are listening\" | /home/lgallion/Projects/Halloween/venv/bin/piper --model en_US-lessac-medium --output_file /home/lgallion/Projects/Halloween/test_tts.wav 2>&1)",
+      "Bash(echo \"The spirits are listening\" | /home/lgallion/Projects/Halloween/venv/bin/piper --model /home/lgallion/Projects/Halloween/voices/en_US-lessac-medium.onnx --output_file /home/lgallion/Projects/Halloween/test_tts.wav 2>&1)",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/python3 -c \"\nfrom faster_whisper import WhisperModel\nprint\\('Downloading Whisper base.en model...'\\)\nmodel = WhisperModel\\('base.en', device='cpu', compute_type='int8'\\)\nprint\\('Whisper model ready!'\\)\n\" 2>&1)",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/python3 test_components.py 2>&1)",
+      "Bash(/home/lgallion/Projects/Halloween/venv/bin/python3 -c \"\nimport ollama, time\nstart = time.time\\(\\)\nr = ollama.chat\\(model='llama3.2:3b', messages=[\n    {'role': 'system', 'content': 'You are a fortune teller. Reply in one sentence.'},\n    {'role': 'user', 'content': 'What does my future hold?'}\n], options={'num_predict': 50}\\)\nprint\\(f'llama3.2:3b \\({time.time\\(\\)-start:.2f}s\\): {r[\\\\\"message\\\\\"][\\\\\"content\\\\\"]}'\\)\n\" 2>&1)",
+      "Bash(chmod +x /home/lgallion/Projects/Halloween/run.sh)",
+      "Bash(chmod +x /home/lgallion/Projects/Halloween/run-claude.sh)"
+    ]
+  }
+}
