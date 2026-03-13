@@ -1,26 +1,46 @@
-# The Crystal Ball
+# The Crystal Ball - AI Halloween Fortune Teller
 
-An AI-powered Halloween fortune teller. Visitors approach a crystal ball, ask a question, and receive a spooky fortune. Choose between **Madam Zelda** (default) or **Baron Mordecai** as your fortune teller. Runs entirely offline on a mini PC.
+An offline, AI-powered Halloween fortune teller prop. Visitors approach a crystal ball, ask a question aloud, and receive a spooky spoken fortune. Runs entirely on a local mini PC with no internet required.
 
-**Stack:** Faster-Whisper (speech-to-text) + Ollama/Llama 3.2 (fortune generation) + Piper TTS (speech output)
+**Stack:** [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) (speech-to-text) + [Ollama](https://ollama.com/) / Llama 3.2 (fortune generation) + [Piper TTS](https://github.com/rhasspy/piper) (text-to-speech)
+
+## How It Works
+
+1. **Listen** - Faster-Whisper with Silero VAD captures the visitor's question via microphone
+2. **Think** - Ollama generates an in-character fortune using a local LLM (a filler phrase plays while it "consults the spirits")
+3. **Speak** - Piper TTS speaks the fortune aloud through the speakers
+4. **Loop** - The crystal ball awaits the next question (say "goodbye" to end the session)
+
+Expected end-to-end latency is 2-4 seconds — a natural "communing with the spirits" pause.
+
+## Personas
+
+| Persona | Character | Style |
+|---------|-----------|-------|
+| **zelda** (default) | Madam Zelda | Playfully spooky, warm, British accent |
+| **mordecai** | Baron Mordecai | Brooding, ominous, grave baritone |
 
 ## Quick Start
 
 ```bash
-./run.sh
-```
-
-Pass any flags through to the main app:
-
-```bash
-./run.sh --persona mordecai          # Baron Mordecai (male, ominous)
-./run.sh --model mistral             # Use Mistral 7B
-./run.sh --length-scale 1.4          # Slower, more dramatic speech
+./run.sh                              # Default (Madam Zelda)
+./run.sh --persona mordecai           # Baron Mordecai
+./run.sh --model mistral              # Use Mistral 7B instead of Llama 3.2
+./run.sh --length-scale 1.4           # Slower, more dramatic speech
 ```
 
 ## Installation
 
-### 1. System Dependencies
+### 1. Clone and Set Up Python Environment
+
+```bash
+git clone https://github.com/GallionConsulting/halloweenoracle.git
+cd halloweenoracle
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 2. System Dependencies
 
 ```bash
 sudo apt update
@@ -28,7 +48,13 @@ sudo apt install -y ffmpeg portaudio19-dev python3-pip
 pip install piper-tts
 ```
 
-### 2. Ollama
+### 3. Python Dependencies
+
+```bash
+pip install -r .planning/requirements.txt
+```
+
+### 4. Ollama (Local LLM)
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
@@ -42,28 +68,45 @@ Environment="OLLAMA_VULKAN=1"
 Environment="OLLAMA_FLASH_ATTENTION=1"
 ```
 
-Then `sudo systemctl daemon-reload && sudo systemctl restart ollama`.
+Then reload: `sudo systemctl daemon-reload && sudo systemctl restart ollama`
 
-### 3. Python Dependencies
+### 5. Download Voice Models
+
+Voice model files (`.onnx` + `.onnx.json`) are not included in this repo due to their size (~375MB total). Download them into the `voices/` directory.
+
+**Browse and preview voices:** [Piper Voice Samples](https://rhasspy.github.io/piper-samples/)
+
+**Download from:** [Piper Voices on Hugging Face](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_GB)
+
+For each voice, you need **both** the `.onnx` model file and its `.onnx.json` config file. Quick download example:
 
 ```bash
-pip install -r .planning/requirements.txt
+mkdir -p voices
+cd voices
+
+# Default voice for Madam Zelda
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx.json
+
+# Default voice for Baron Mordecai (multi-speaker, uses speaker 2 "obadiah")
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx.json
+
+cd ..
 ```
 
-### 4. Voice Models
+**All recommended voices:**
 
-Six Piper voices are included in `voices/`. Download more from the [Piper voices repository](https://huggingface.co/rhasspy/piper-voices/tree/main/en) (grab both `.onnx` and `.onnx.json` files). Preview voices at [Piper voice samples](https://rhasspy.github.io/piper-samples/).
+| Voice | Description | Used By |
+|-------|-------------|---------|
+| `en_GB-alba-medium` | British female, warm | Madam Zelda (default) |
+| `en_GB-semaine-medium` | British RP, multi-speaker (obadiah = speaker 2) | Baron Mordecai (default) |
+| `en_GB-jenny_dioco-medium` | British female, expressive | Optional |
+| `en_GB-northern_english_male-medium` | Northern English male, deep | Optional |
+| `en_GB-alan-medium` | British male | Optional |
+| `en_US-lessac-medium` | American, neutral | Optional |
 
-| Voice | Description |
-|-------|-------------|
-| **en_GB-alba-medium** | British female, warm (default) |
-| en_GB-jenny_dioco-medium | British female, expressive |
-| en_GB-semaine-medium | British RP, 4 speakers: prudence (0), spike (1), **obadiah (2)**, poppy (3) |
-| en_GB-northern_english_male-medium | Northern English male, deep and distinctive |
-| en_GB-alan-medium | British male |
-| en_US-lessac-medium | American, neutral |
-
-### 5. Verify Setup
+### 6. Verify Setup
 
 ```bash
 # Test all components at once
@@ -75,22 +118,7 @@ echo "The spirits are listening" | piper --model voices/en_GB-alba-medium.onnx -
 python .planning/test_microphone.py
 ```
 
-## Usage
-
-```bash
-./run.sh
-```
-
-The system announces itself, listens for a question, generates a fortune, speaks it, and loops. Say "goodbye" to exit.
-
-### Personas
-
-| Persona | Character | Voice | Style |
-|---------|-----------|-------|-------|
-| **zelda** (default) | Madam Zelda | en_GB-alba-medium | Playfully spooky, warm |
-| **mordecai** | Baron Mordecai | en_GB-semaine-medium (obadiah) | Brooding, ominous, grave |
-
-### Options
+## Usage Options
 
 ```
 --persona PERSONA     Fortune teller persona: zelda, mordecai (default: zelda)
@@ -108,22 +136,15 @@ The system announces itself, listens for a question, generates a fortune, speaks
 
 | `--length-scale` | Effect |
 |-------------------|--------|
-| `0.75` | Fast (testing) |
-| `1.0` | Normal |
+| `0.75` | Fast (good for testing) |
+| `1.0` | Normal speed |
 | **`1.2`** | **Slightly slow (default)** |
 | `1.4` | Dramatic |
 | `1.6` | Maximum spookiness |
 
-Combine options for full theatrical delivery:
-
 ```bash
-./run.sh --length-scale 1.3 --sentence-silence 0.5
-```
-
-**Compare voices without running the full app:**
-
-```bash
-TEXT="The mists swirl... I see a journey in your future. Beware the stranger at the crossroads."
+# Compare all downloaded voices
+TEXT="The mists swirl... I see a journey in your future."
 for voice in voices/*.onnx; do
   echo "--- $voice ---"
   echo "$TEXT" | piper --model "$voice" --length-scale 1.2 --output-raw | aplay -r 22050 -f S16_LE
@@ -137,23 +158,7 @@ done
 ./run.sh --mic-device 3     # Use that index
 ```
 
-You can also set the default input device system-wide via Sound Settings or `pavucontrol`.
-
-## Customization
-
-### Changing the Personality
-
-Edit the `PERSONAS` dict in `.planning/crystal_ball.py`. Each persona defines its system prompt, voice, filler phrases, and greeting/farewell lines. Keep responses limited to 2-3 sentences, include example phrases, and specify what to avoid (breaking character, etc.).
-
-### LED Effects
-
-See `.planning/led_integration.py` for WLED (WiFi), Arduino/Pico (serial), and dummy controllers with a full integration example.
-
-### Cloud LLM (Instead of Local)
-
-See `.planning/cloud_api_example.py` for Claude and OpenAI API integration. Useful if you want higher quality responses and have internet access.
-
-### LLM Model Options
+## LLM Model Options
 
 | Model | RAM | Notes |
 |-------|-----|-------|
@@ -162,39 +167,47 @@ See `.planning/cloud_api_example.py` for Claude and OpenAI API integration. Usef
 | phi3 | ~2GB | Alternative small model |
 | llama3.1:8b | ~5GB | Best quality, slower |
 
-## Troubleshooting
+## Customization
 
-| Problem | Fix |
-|---------|-----|
-| Whisper hallucinating phrases on silence | VAD should be enabled (`vad_filter=True` in transcribe call) |
-| Responses too slow | Enable Vulkan for Ollama; use `llama3.2:3b`; reduce `max_tokens` |
-| Voice too fast/slow | Adjust `--length-scale` (higher = slower) |
-| Audio not working | Run `python -c "import sounddevice; print(sounddevice.query_devices())"` and try `--mic-device` |
-| Ollama connection refused | Run `ollama serve`; verify with `curl http://localhost:11434/api/tags` |
-
-## Project Structure
-
-```
-Halloween/
-├── README.md
-├── run.sh                    # Launch script (activates venv, runs app)
-├── test_components.py        # Verify all components work
-├── voices/                   # Piper TTS voice models (.onnx + .onnx.json)
-└── .planning/
-    ├── crystal_ball.py       # Main application
-    ├── requirements.txt      # Python dependencies
-    ├── test_microphone.py    # Audio device testing
-    ├── led_integration.py    # LED control (WLED/serial/dummy)
-    ├── cloud_api_example.py  # Cloud LLM alternative
-    ├── parakeet_alternative.py # Alternative STT engine
-    └── RESEARCH_NOTES.md     # Background research
-```
+- **Personas** - Edit `PERSONAS` in `.planning/crystal_ball.py` to tweak prompts, voices, filler phrases, and greetings
+- **LED effects** - See `.planning/led_integration.py` for WLED (WiFi), Arduino/Pico (serial), and dummy controllers
+- **Cloud LLM** - See `.planning/cloud_api_example.py` for Claude and OpenAI API integration (requires internet)
 
 ## Hardware
 
 - **Mini PC:** Ryzen 5 / 16GB RAM (or similar)
 - **Microphone:** USB or 3.5mm
 - **Speakers:** Any powered speakers
-- **Optional:** WS2812B LED strip + ESP8266 with WLED firmware
+- **Optional:** WS2812B LED strip + ESP8266 with [WLED](https://kno.wled.ge/) firmware
 
-Expected latency: 2-4 seconds end-to-end (a natural "consulting the spirits" pause).
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Whisper hallucinating on silence | VAD is enabled by default (`vad_filter=True`) — check mic sensitivity |
+| Responses too slow | Enable Vulkan for Ollama; use `llama3.2:3b`; reduce `max_tokens` |
+| Voice too fast/slow | Adjust `--length-scale` (higher = slower) |
+| Audio not working | Run `./run.sh --list-devices` and try `--mic-device` |
+| Ollama connection refused | Run `ollama serve`; verify with `curl http://localhost:11434/api/tags` |
+| Missing voice models | See [Download Voice Models](#5-download-voice-models) above |
+
+## Project Structure
+
+```
+halloweenoracle/
+├── README.md
+├── run.sh                    # Launch script (activates venv, runs app)
+├── test_components.py        # Verify all components work
+├── voices/                   # Piper TTS voice models (not in repo, see install step 5)
+└── .planning/
+    ├── crystal_ball.py       # Main application
+    ├── requirements.txt      # Python dependencies
+    ├── test_microphone.py    # Audio device testing
+    ├── led_integration.py    # LED control examples (WLED/serial/dummy)
+    ├── cloud_api_example.py  # Cloud LLM alternative
+    └── RESEARCH_NOTES.md     # Background research & links
+```
+
+## License
+
+MIT
