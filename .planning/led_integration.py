@@ -123,7 +123,7 @@ WLED_PALETTES = {
     'forest': 10,
     'lava': 36,
     'sunset': 28,
-    'fairy_reaf': 41,     # Pinks and purples
+    'fairy_reef': 41,     # Pinks and purples
     'semi_blue': 42,
     'aurora': 50,
 }
@@ -199,9 +199,9 @@ class WLEDController(LEDController):
             req = urllib.request.Request(f'{self.base_url}/state', method='GET')
             urllib.request.urlopen(req, timeout=self.timeout)
             return True
-        except:
+        except Exception:
             return False
-    
+
     def _get_info(self):
         """Get and display WLED device info."""
         try:
@@ -212,7 +212,7 @@ class WLEDController(LEDController):
             version = info.get('ver', '?')
             name = info.get('name', 'WLED')
             print(f"   Device: {name}, LEDs: {led_count}, Version: {version}")
-        except:
+        except Exception:
             pass
     
     def _send(self, data: dict) -> bool:
@@ -530,14 +530,14 @@ def create_led_controller(
             controller = WLEDController(host=wled_host, **kwargs)
             if controller._test_connection():
                 return controller
-        except:
+        except Exception:
             pass
-        
+
         # Try serial
         for port in ['/dev/ttyUSB0', '/dev/ttyACM0', 'COM3', 'COM4']:
             try:
                 return SerialLEDController(port=port)
-            except:
+            except Exception:
                 continue
         
         # Fall back to dummy

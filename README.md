@@ -45,7 +45,6 @@ source venv/bin/activate
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg portaudio19-dev python3-pip
-pip install piper-tts
 ```
 
 ### 3. Python Dependencies
@@ -166,6 +165,8 @@ done
 | **llama3.2:3b** | ~2GB | Default, fast |
 | mistral | ~4GB | Higher quality |
 | phi3 | ~2GB | Alternative small model |
+| qwen3:8b | ~5GB | Strong reasoning & multilingual |
+| gemma3n | ~5GB | Efficient on-device performance |
 | llama3.1:8b | ~5GB | Best quality, slower |
 
 ## Customization
@@ -217,6 +218,7 @@ Each persona YAML controls the character's identity, voice, LLM settings, system
 halloweenoracle/
 ├── README.md
 ├── run.sh                    # Launch script (activates venv, runs app)
+├── run-claude.sh             # Alternative launch script
 ├── test_components.py        # Verify all components work
 ├── voices/                   # Piper TTS voice models (not in repo, see install step 5)
 ├── personas/                 # Persona definitions (YAML)
@@ -228,6 +230,7 @@ halloweenoracle/
     ├── test_microphone.py    # Audio device testing
     ├── led_integration.py    # LED control examples (WLED/serial/dummy)
     ├── cloud_api_example.py  # Cloud LLM alternative
+    ├── parakeet_alternative.py # NVIDIA Parakeet STT alternative
     └── RESEARCH_NOTES.md     # Background research & links
 ```
 

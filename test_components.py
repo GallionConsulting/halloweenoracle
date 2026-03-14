@@ -11,9 +11,11 @@ import wave
 import subprocess
 
 import numpy as np
+from pathlib import Path
 
-VENV_PIPER = "venv/bin/piper"
-VOICE_MODEL = "voices/en_US-lessac-medium.onnx"
+SCRIPT_DIR = Path(__file__).resolve().parent
+VENV_PIPER = str(SCRIPT_DIR / "venv/bin/piper")
+VOICE_MODEL = str(SCRIPT_DIR / "voices/en_US-lessac-medium.onnx")
 
 
 def test_whisper():
@@ -58,12 +60,12 @@ def test_whisper():
 
 def test_ollama():
     """Test LLM response generation."""
-    print("\n[2/4] Testing Ollama LLM (Mistral)...")
+    print("\n[2/4] Testing Ollama LLM (llama3.2:3b)...")
     import ollama
 
     start = time.time()
     response = ollama.chat(
-        model="mistral",
+        model="llama3.2:3b",
         messages=[
             {"role": "system", "content": "You are a fortune teller. Reply in one sentence."},
             {"role": "user", "content": "What does my future hold?"},

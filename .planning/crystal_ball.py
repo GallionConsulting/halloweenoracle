@@ -56,7 +56,7 @@ MIN_SPEECH_DURATION = 0.5     # Minimum speech to process
 # =============================================================================
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PERSONAS_DIR = SCRIPT_DIR / "personas"
+PERSONAS_DIR = SCRIPT_DIR.parent / "personas"
 
 REQUIRED_FIELDS = [
     "name", "prompt_label", "init_label",
@@ -322,6 +322,14 @@ class TextToSpeech:
         self.sentence_silence = sentence_silence
         self.speaker = speaker
         self.sample_rate = 22050  # Piper's default
+
+        # Warn if the voice model file doesn't exist
+        voice_path = Path(voice)
+        if not voice_path.is_absolute():
+            voice_path = SCRIPT_DIR.parent / voice
+        if not voice_path.is_file():
+            print(f"Warning: Voice model not found: {voice_path}")
+            print("  TTS will likely fail. Check the 'voice' field in your persona YAML.")
 
         # Test Piper availability
         try:

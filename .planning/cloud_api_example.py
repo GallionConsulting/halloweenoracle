@@ -20,8 +20,11 @@ from abc import ABC, abstractmethod
 # System Prompt (same as main app)
 # =============================================================================
 
-SYSTEM_PROMPT = """You are Madam Zelda, an enigmatic fortune teller speaking 
-through a mystical crystal ball on Halloween night. You give short, theatrical 
+# NOTE: This is a standalone fallback prompt. If you integrate a cloud generator
+# into crystal_ball.py, pass the persona's system_prompt instead of using this
+# constant, so the prompt stays in sync with the active persona YAML file.
+SYSTEM_PROMPT = """You are Madam Zelda, an enigmatic fortune teller speaking
+through a mystical crystal ball on Halloween night. You give short, theatrical
 predictions (2-3 sentences max). Be playfully spooky but family-friendly.
 
 Style guidelines:
@@ -179,16 +182,15 @@ if __name__ == "__main__":
     print("Cloud API Fortune Generator Examples")
     print("=" * 50)
     print()
-    print("To use in crystal_ball.py, replace the FortuneGenerator import:")
-    print()
-    print("  # Instead of local Ollama:")
-    print("  # from crystal_ball import FortuneGenerator")
+    print("To use as a drop-in replacement for the Ollama FortuneGenerator in")
+    print("crystal_ball.py, instantiate one of the classes below and pass the")
+    print("persona's system_prompt so the character stays in sync:")
     print()
     print("  # Use Claude:")
-    print("  from cloud_api_example import ClaudeFortuneGenerator as FortuneGenerator")
+    print("  from cloud_api_example import ClaudeFortuneGenerator")
     print()
     print("  # Or use OpenAI:")
-    print("  from cloud_api_example import OpenAIFortuneGenerator as FortuneGenerator")
+    print("  from cloud_api_example import OpenAIFortuneGenerator")
     print()
     print("Don't forget to set your API key:")
     print("  export ANTHROPIC_API_KEY='sk-ant-...'")
