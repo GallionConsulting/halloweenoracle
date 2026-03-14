@@ -121,12 +121,13 @@ python .planning/test_microphone.py
 ## Usage Options
 
 ```
---persona PERSONA     Fortune teller persona: zelda, mordecai (default: zelda)
---model MODEL         Ollama model (default: llama3.2:3b)
+--persona NAME/PATH   Fortune teller persona name or path to YAML file (default: zelda)
+--model MODEL         Ollama model (overrides persona default)
+--whisper-model MODEL Whisper model size (overrides persona default)
 --voice VOICE         Piper voice model path (overrides persona default)
---length-scale N      Speech speed, higher = slower (default: 1.2)
---sentence-silence N  Pause between sentences in seconds (default: 0.3)
---speaker ID          Speaker ID for multi-speaker voice models
+--length-scale N      Speech speed, higher = slower (overrides persona default)
+--sentence-silence N  Pause between sentences in seconds (overrides persona default)
+--speaker ID          Speaker ID for multi-speaker voice models (overrides persona default)
 --mic-device ID       Microphone device index
 --list-devices        List audio devices and exit
 --debug               Show timing and debug info
@@ -169,7 +170,26 @@ done
 
 ## Customization
 
-- **Personas** - Edit `PERSONAS` in `.planning/crystal_ball.py` to tweak prompts, voices, filler phrases, and greetings
+### Creating a Custom Persona
+
+Personas are defined in YAML files in the `personas/` directory. To create a new one, copy an existing file and edit it:
+
+```bash
+cp personas/zelda.yaml personas/witch.yaml
+# Edit personas/witch.yaml with your character's details
+./run.sh --persona witch
+```
+
+You can also load a persona from any path:
+
+```bash
+./run.sh --persona /path/to/custom.yaml
+```
+
+Each persona YAML controls the character's identity, voice, LLM settings, system prompt, filler phrases, and all UI messages. See `personas/zelda.yaml` for the full schema.
+
+### Other Customization
+
 - **LED effects** - See `.planning/led_integration.py` for WLED (WiFi), Arduino/Pico (serial), and dummy controllers
 - **Cloud LLM** - See `.planning/cloud_api_example.py` for Claude and OpenAI API integration (requires internet)
 
@@ -199,6 +219,9 @@ halloweenoracle/
 ├── run.sh                    # Launch script (activates venv, runs app)
 ├── test_components.py        # Verify all components work
 ├── voices/                   # Piper TTS voice models (not in repo, see install step 5)
+├── personas/                 # Persona definitions (YAML)
+│   ├── zelda.yaml            # Madam Zelda (default)
+│   └── mordecai.yaml         # Baron Mordecai
 └── .planning/
     ├── crystal_ball.py       # Main application
     ├── requirements.txt      # Python dependencies

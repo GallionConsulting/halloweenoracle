@@ -115,6 +115,8 @@ ollama pull mistral
 | mistral | ~4GB | Better | Recommended |
 | phi3 | ~2GB | Good | Alternative |
 | llama3.1:8b | ~5GB | Best | If speed allows |
+| qwen3:8b | ~5GB | Best | Strong reasoning & multilingual |
+| gemma3n | ~5GB | Best | Efficient on-device performance |
 
 
 ### llama.cpp

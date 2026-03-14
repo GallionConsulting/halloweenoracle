@@ -17,6 +17,9 @@ piper-tts>=1.2.0
 sounddevice>=0.4.6
 numpy>=1.24.0
 
+# Persona configuration
+pyyaml>=6.0
+
 # Optional: For cloud API alternatives
 # anthropic>=0.25.0
 # openai>=1.0.0

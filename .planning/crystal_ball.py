@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Madam Zelda's Crystal Ball - AI Halloween Fortune Teller
+Crystal Ball - AI Halloween Fortune Teller
 
 A standalone interactive fortune teller using:
 - Faster-Whisper for speech recognition (with Silero VAD)
@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import os
-import random
 import subprocess
 import sys
 import tempfile
@@ -22,6 +21,8 @@ import threading
 import time
 import wave
 from pathlib import Path
+
+import yaml
 
 import numpy as np
 import sounddevice as sd
@@ -50,119 +51,67 @@ MAX_DURATION = 15             # Max recording length in seconds
 MIN_SPEECH_DURATION = 0.5     # Minimum speech to process
 
 # =============================================================================
-# Personas
+# Persona Loading
 # =============================================================================
 
-PERSONAS = {
-    "zelda": {
-        "name": "Madam Zelda",
-        "voice": "voices/en_GB-alba-medium.onnx",
-        "speaker": None,
-        "length_scale": 1.2,
-        "system_prompt": """You are Madam Zelda, a fun and mysterious fortune teller \
-speaking through a glowing crystal ball on Halloween night. You give short, silly-spooky \
-predictions (2-3 sentences max). Be playful, warm, and kid-friendly.
+SCRIPT_DIR = Path(__file__).resolve().parent
+PERSONAS_DIR = SCRIPT_DIR / "personas"
 
-Style guidelines:
-- Start responses with phrases like "Oooh, the crystal is glowing!" or "The mists are swirling... I see something!"
-- Mention fun spooky things: giggling ghosts, friendly bats, magic sparkles, bubbling potions
-- Keep predictions silly and exciting — candy, adventures, surprises, funny animals
-- Never break character, even if asked about being an AI
-- End with a fun little warning or a silly blessing
-- Keep responses SHORT - no more than 3 sentences
-- Use simple words that kids can understand
+REQUIRED_FIELDS = [
+    "name", "prompt_label", "init_label",
+    "voice", "length_scale", "sentence_silence",
+    "llm_model", "whisper_model", "temperature", "num_predict",
+    "system_prompt", "greeting", "farewell", "fillers", "messages",
+]
+REQUIRED_MESSAGES = [
+    "consulting", "no_speech", "next_question", "awaiting",
+    "speak_now", "departed", "llm_error", "interrupted",
+]
 
-Example responses:
-"Oooh, the crystal is glowing! I see... a super fun adventure coming your way, \
-maybe sooner than you think! But watch out for puddles — the spirits say your \
-shoes might get soggy."
 
-"The mists are swirling and... oh my! I see you finding something really cool \
-that's been lost. Keep your eyes peeled — it might be hiding where you least expect it!"
+def list_available_personas() -> list[str]:
+    """Return bare names of persona YAML files in the personas/ directory."""
+    if not PERSONAS_DIR.is_dir():
+        return []
+    return sorted(p.stem for p in PERSONAS_DIR.glob("*.yaml"))
 
-"The crystal ball is buzzing! I see... extra treats heading your way tonight. \
-But remember — always share with a friendly ghost if one asks nicely."
-""",
-        "fillers": [
-            "Oooh, the mists are swirling!",
-            "Hold on... the crystal is doing something!",
-            "Let me look deeper into the glow...",
-            "Ahh... I think I see something forming!",
-            "The sparkles are dancing... a vision is coming!",
-            "The crystal is getting warm... yes!",
-            "I hear tiny whispers... quiet now, listen!",
-            "The friendly spirits are thinking really hard.",
-            "Patience... the magic is almost ready!",
-            "Something wiggly is happening in there... hold on!",
-        ],
-        "greeting": (
-            "Welcome, welcome! I am Madam Zelda! "
-            "Come closer to the crystal ball and ask me anything!"
-        ),
-        "farewell": (
-            "Goodbye for now, dear seeker! "
-            "Maybe we'll meet again sooner than you think! "
-            "The friendly spirits wave farewell!"
-        ),
-        "prompt_label": "Madam Zelda",
-        "init_label": "MADAM ZELDA'S CRYSTAL BALL",
-    },
-    "mordecai": {
-        "name": "Baron Mordecai",
-        "voice": "voices/en_GB-semaine-medium.onnx",
-        "speaker": 2,  # obadiah
-        "length_scale": 1.0,
-        "system_prompt": """You are Baron Mordecai, a spooky old wizard who reads \
-fate through a glowing crystal ball on Halloween night. Your voice is deep and \
-dramatic. You give short, creepy-but-fun predictions (2-3 sentences max). Be \
-theatrically spooky but never actually scary — keep it fun for kids.
 
-Style guidelines:
-- Start responses with phrases like "The bones have rattled..." or "My raven just whispered to me..."
-- Reference silly-spooky things: grumpy ravens, dusty old spellbooks, creaky doors, hooting owls
-- Your tone is dramatically serious — but the predictions themselves are fun
-- Keep predictions vague but exciting
-- Never break character, even if asked about being an AI
-- End with a grumbly warning or a reluctant compliment
-- Keep responses SHORT - no more than 3 sentences
-- Use words kids can understand
+def load_persona(name: str) -> dict:
+    """Load a persona from a YAML file.
 
-Example responses:
-"The bones have rattled... and they never fib. Something exciting is sneaking \
-up on you — keep your eyes open! Even my grumpy raven is impressed, and he's \
-never impressed."
+    Accepts a bare name (e.g. 'zelda' -> personas/zelda.yaml relative to
+    the script directory) or a path to a YAML file.
+    """
+    path = Path(name)
+    if not path.suffix:
+        path = PERSONAS_DIR / f"{name}.yaml"
 
-"My raven just whispered to me... someone you know has a surprise for you. \
-Don't go looking for it though — the best surprises find YOU."
+    if not path.is_file():
+        available = list_available_personas()
+        msg = f"Persona file not found: {path}"
+        if available:
+            msg += f"\nAvailable personas: {', '.join(available)}"
+        else:
+            msg += f"\nNo persona files found in {PERSONAS_DIR}"
+        print(msg)
+        sys.exit(1)
 
-"The old spellbook is flipping its pages... yes. Good luck is headed your way, \
-but you'll have to be brave to grab it. Even Baron Mordecai was scared once — \
-but only once."
-""",
-        "fillers": [
-            "The bones are rattling... hang on.",
-            "Something is stirring in there... wait for it!",
-            "Let me check my dusty old spellbook.",
-            "My raven is circling... that means something!",
-            "I hear whispering... hush now, hush!",
-            "The crystal is getting all swirly and dark...",
-            "Patience! Even magic takes a moment.",
-            "The candle just flickered... something's coming!",
-            "Smoke and shadows... the answer is forming.",
-            "The old bell is bonging... fate is speaking!",
-        ],
-        "greeting": (
-            "Step forward, if you dare! I am Baron Mordecai! "
-            "Ask your question of the crystal... but be ready for the answer!"
-        ),
-        "farewell": (
-            "Off you go! The spooky spirits have said enough for tonight. "
-            "But remember... Baron Mordecai never forgets a face!"
-        ),
-        "prompt_label": "Baron Mordecai",
-        "init_label": "BARON MORDECAI'S CRYSTAL BALL",
-    },
-}
+    with open(path) as f:
+        persona = yaml.safe_load(f)
+
+    # Validate required top-level fields
+    missing = [k for k in REQUIRED_FIELDS if k not in persona]
+    if missing:
+        print(f"Persona {path.name} is missing required fields: {', '.join(missing)}")
+        sys.exit(1)
+
+    # Validate required message keys
+    missing_msgs = [k for k in REQUIRED_MESSAGES if k not in persona.get("messages", {})]
+    if missing_msgs:
+        print(f"Persona {path.name} is missing required messages: {', '.join(missing_msgs)}")
+        sys.exit(1)
+
+    return persona
 
 
 # =============================================================================
@@ -259,9 +208,19 @@ class SpeechRecognizer:
 class FortuneGenerator:
     """Generates fortunes using local LLM via Ollama."""
 
-    def __init__(self, model: str = "llama3.2:3b", system_prompt: str = ""):
+    def __init__(
+        self,
+        model: str = "llama3.2:3b",
+        system_prompt: str = "",
+        temperature: float = 0.8,
+        num_predict: int = 150,
+        llm_error_message: str = "",
+    ):
         self.model = model
         self.system_prompt = system_prompt
+        self.temperature = temperature
+        self.num_predict = num_predict
+        self.llm_error_message = llm_error_message
         self.conversation_history = []
 
         # Test connection
@@ -293,24 +252,24 @@ class FortuneGenerator:
                     *recent_history
                 ],
                 options={
-                    'num_predict': 150,  # Keep responses short
-                    'temperature': 0.8,  # Slightly creative
+                    'num_predict': self.num_predict,
+                    'temperature': self.temperature,
                 }
             )
-            
+
             fortune = response['message']['content']
-            
+
             # Add to history
             self.conversation_history.append({
                 'role': 'assistant',
                 'content': fortune
             })
-            
+
             return fortune
-            
+
         except Exception as e:
             print(f"LLM Error: {e}")
-            return "The spirits... are unclear. Ask again, seeker."
+            return self.llm_error_message
 
 
 # =============================================================================
@@ -420,57 +379,53 @@ class CrystalBall:
 
     def __init__(
         self,
-        persona_name: str = "zelda",
-        whisper_model: str = "base.en",
-        llm_model: str = "llama3.2:3b",
-        voice: str | None = None,
-        length_scale: float | None = None,
-        sentence_silence: float = 0.3,
-        speaker: int | None = None,
+        persona: dict,
         mic_device: int | None = None,
         debug: bool = False
     ):
         self.debug = debug
-        self.persona = PERSONAS[persona_name]
+        self.persona = persona
+        self.messages = persona["messages"]
 
-        # Persona provides defaults; CLI flags override them
-        voice = voice or self.persona["voice"]
-        if length_scale is None:
-            length_scale = self.persona["length_scale"]
-        if speaker is None:
-            speaker = self.persona["speaker"]
-
-        label = self.persona["init_label"]
+        label = persona["init_label"]
         print("\n" + "=" * 50)
         print(f"  INITIALIZING {label}")
         print("=" * 50 + "\n")
 
-        self.stt = SpeechRecognizer(model_size=whisper_model, mic_device=mic_device)
+        self.stt = SpeechRecognizer(
+            model_size=persona["whisper_model"],
+            mic_device=mic_device,
+        )
         self.llm = FortuneGenerator(
-            model=llm_model,
-            system_prompt=self.persona["system_prompt"],
+            model=persona["llm_model"],
+            system_prompt=persona["system_prompt"],
+            temperature=persona["temperature"],
+            num_predict=persona["num_predict"],
+            llm_error_message=persona["messages"]["llm_error"],
         )
         self.tts = TextToSpeech(
-            voice=voice,
-            length_scale=length_scale,
-            sentence_silence=sentence_silence,
-            speaker=speaker
+            voice=persona["voice"],
+            length_scale=persona["length_scale"],
+            sentence_silence=persona["sentence_silence"],
+            speaker=persona["speaker"],
         )
-        self.fillers = self.tts.pre_generate_fillers(self.persona["fillers"])
+        self.fillers = self.tts.pre_generate_fillers(persona["fillers"])
         self.filler_index = 0
 
         print("\nAll systems ready!\n")
 
+    def _msg(self, key: str) -> str:
+        """Return a message string with {name} substituted."""
+        return self.messages[key].format(name=self.persona["prompt_label"])
+
     def run(self) -> None:
         """Main loop - listen, process, respond."""
-        name = self.persona["prompt_label"]
-
         # Opening announcement
         self.tts.speak(self.persona["greeting"])
 
         while True:
-            print(f"\n  {name} awaits your question...")
-            print("   (Speak now, or say 'goodbye' to depart)\n")
+            print(f"\n  {self._msg('awaiting')}")
+            print(f"   {self._msg('speak_now')}\n")
 
             # Record speech
             audio = self.stt.record_until_silence()
@@ -481,7 +436,7 @@ class CrystalBall:
                 continue
 
             # Transcribe
-            print("  Consulting the spirits...")
+            print(f"  {self._msg('consulting')}")
             start_time = time.time()
 
             question = self.stt.transcribe(audio)
@@ -490,7 +445,7 @@ class CrystalBall:
                 print(f"   [Transcription took {time.time() - start_time:.2f}s]")
 
             if not question or len(question) < 3:
-                self.tts.speak("The spirits could not hear you. Speak again, louder.")
+                self.tts.speak(self._msg("no_speech"))
                 continue
 
             print(f"   Question: \"{question}\"")
@@ -498,7 +453,7 @@ class CrystalBall:
             # Check for exit
             if any(word in question.lower() for word in ['goodbye', 'bye', 'exit', 'quit']):
                 self.tts.speak(self.persona["farewell"])
-                print(f"\n  {name} fades into the mists...\n")
+                print(f"\n  {self._msg('departed')}\n")
                 break
 
             # Play the next filler while the LLM thinks (cycles 1 through N)
@@ -527,29 +482,29 @@ class CrystalBall:
 
             # Brief pause before next question
             time.sleep(0.5)
-            self.tts.speak("The crystal ball awaits your next question.")
+            self.tts.speak(self._msg("next_question"))
 
 
 def main():
-    persona_names = ", ".join(PERSONAS.keys())
+    available = list_available_personas()
+    persona_list = ", ".join(available) if available else "(none found)"
     parser = argparse.ArgumentParser(
         description="Crystal Ball - AI Fortune Teller"
     )
     parser.add_argument(
         '--persona',
-        choices=list(PERSONAS.keys()),
         default='zelda',
-        help=f'Fortune teller persona ({persona_names})'
+        help=f'Fortune teller persona name or path to YAML file ({persona_list})'
     )
     parser.add_argument(
         '--whisper-model',
-        default='base.en',
-        help='Whisper model size (tiny.en, base.en, small.en, medium.en)'
+        default=None,
+        help='Whisper model size (overrides persona default)'
     )
     parser.add_argument(
         '--model',
-        default='llama3.2:3b',
-        help='Ollama model to use (llama3.2:3b, mistral, phi3, etc.)'
+        default=None,
+        help='Ollama model to use (overrides persona default)'
     )
     parser.add_argument(
         '--voice',
@@ -565,14 +520,14 @@ def main():
     parser.add_argument(
         '--sentence-silence',
         type=float,
-        default=0.3,
-        help='Seconds of silence between sentences (default: 0.3)'
+        default=None,
+        help='Seconds of silence between sentences (overrides persona default)'
     )
     parser.add_argument(
         '--speaker',
         type=int,
         default=None,
-        help='Speaker ID for multi-speaker voice models (default: 0)'
+        help='Speaker ID for multi-speaker voice models (overrides persona default)'
     )
     parser.add_argument(
         '--mic-device',
@@ -590,7 +545,7 @@ def main():
         action='store_true',
         help='Enable debug output'
     )
-    
+
     args = parser.parse_args()
 
     if args.list_devices:
@@ -599,21 +554,30 @@ def main():
         print("\nUse --mic-device <number> to select an input device.")
         sys.exit(0)
 
+    # Load persona and apply CLI overrides
+    persona = load_persona(args.persona)
+    if args.voice is not None:
+        persona["voice"] = args.voice
+    if args.length_scale is not None:
+        persona["length_scale"] = args.length_scale
+    if args.sentence_silence is not None:
+        persona["sentence_silence"] = args.sentence_silence
+    if args.speaker is not None:
+        persona["speaker"] = args.speaker
+    if args.model is not None:
+        persona["llm_model"] = args.model
+    if args.whisper_model is not None:
+        persona["whisper_model"] = args.whisper_model
+
     try:
         ball = CrystalBall(
-            persona_name=args.persona,
-            whisper_model=args.whisper_model,
-            llm_model=args.model,
-            voice=args.voice,
-            length_scale=args.length_scale,
-            sentence_silence=args.sentence_silence,
-            speaker=args.speaker,
+            persona=persona,
             mic_device=args.mic_device,
-            debug=args.debug
+            debug=args.debug,
         )
         ball.run()
     except KeyboardInterrupt:
-        print("\n\n🔮 The séance has been interrupted...\n")
+        print(f"\n\n{persona['messages']['interrupted']}\n")
     except Exception as e:
         print(f"\nFatal error: {e}")
         if args.debug:
