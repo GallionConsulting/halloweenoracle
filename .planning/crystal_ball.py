@@ -239,6 +239,13 @@ class FortuneGenerator:
                         print(f"  Available models: {', '.join(sorted(available_models))}")
                     print(f"\n  To fix: ollama pull {model}")
                     raise RuntimeError(f"Model '{model}' not available")
+            # Pre-load the model into memory so the first query is fast
+            print(f"Pre-loading {model} into memory...")
+            ollama.chat(
+                model=self.model,
+                messages=[{'role': 'user', 'content': 'hello'}],
+                options={'num_predict': 1},
+            )
             print(f"LLM ready (using {model}).")
         except RuntimeError:
             raise
@@ -281,10 +288,28 @@ class FortuneGenerator:
             fortune = re.sub(r'<think>[\s\S]*$', '', fortune)
             # Strip markdown emphasis (*/_) so TTS doesn't say "asterisk"
             fortune = re.sub(r'(\*{1,3}|_{1,3})(.+?)\1', r'\2', fortune)
+            # Strip emojis so TTS doesn't try to read them
+            fortune = re.sub(
+                r'[\U0001F600-\U0001F64F'   # emoticons
+                r'\U0001F300-\U0001F5FF'     # misc symbols & pictographs
+                r'\U0001F680-\U0001F6FF'     # transport & map symbols
+                r'\U0001F1E0-\U0001F1FF'     # flags
+                r'\U0001F900-\U0001F9FF'     # supplemental symbols
+                r'\U0001FA00-\U0001FA6F'     # chess symbols & extended-A
+                r'\U0001FA70-\U0001FAFF'     # symbols & pictographs extended-A
+                r'\U00002702-\U000027B0'     # dingbats
+                r'\U0000FE00-\U0000FE0F'     # variation selectors
+                r'\U0000200D'                # zero-width joiner
+                r'\U000020E3'                # combining enclosing keycap
+                r'\U00002600-\U000026FF'     # misc symbols (sun, stars, etc.)
+                r'\U00002300-\U000023FF'     # misc technical
+                r']+', '', fortune)
+            # Replace ellipses with commas so TTS pauses naturally
+            fortune = fortune.replace('...', ',')
             fortune = fortune.strip()
 
             if raw_fortune != fortune and self.debug:
-                print(f"   [Cleaned LLM response (think tags / markdown)]")
+                print(f"   [Cleaned LLM response (think tags / markdown / emojis)]")
 
             if not fortune:
                 print("Warning: LLM response was empty after stripping <think> tags")
