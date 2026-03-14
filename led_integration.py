@@ -187,10 +187,10 @@ class WLEDController(LEDController):
         
         # Test connection
         if self._test_connection():
-            print(f"✅ WLED controller connected at {host}")
+            print(f"WLED controller connected at {host}")
             self._get_info()
         else:
-            print(f"⚠️  WLED controller at {host} not responding")
+            print(f"WLED controller at {host} not responding")
             print("   Will retry on each command")
     
     def _test_connection(self) -> bool:
@@ -435,7 +435,7 @@ class SerialLEDController(LEDController):
             import serial
             self.serial = serial.Serial(port, baud, timeout=1)
             time.sleep(2)  # Wait for Arduino reset
-            print(f"✅ Serial LED controller connected on {port}")
+            print(f"Serial LED controller connected on {port}")
         except ImportError:
             print("pyserial not installed. Run: pip install pyserial")
             raise
@@ -471,29 +471,37 @@ class SerialLEDController(LEDController):
 # =============================================================================
 
 class DummyLEDController(LEDController):
-    """Dummy controller that prints state changes for testing."""
-    
-    def __init__(self):
-        print("✅ Using dummy LED controller (no hardware)")
-    
+    """Dummy controller that prints state changes when debug is enabled."""
+
+    def __init__(self, debug: bool = False):
+        self.debug = debug
+        if self.debug:
+            print("[LED] Using dummy LED controller (no hardware)")
+
     def idle(self):
-        print("   💡 [LED: idle - purple pulse]")
-    
+        if self.debug:
+            print("   [LED: idle - purple pulse]")
+
     def listening(self):
-        print("   💡 [LED: listening - green glow]")
-    
+        if self.debug:
+            print("   [LED: listening - green glow]")
+
     def thinking(self):
-        print("   💡 [LED: thinking - blue swirl]")
-    
+        if self.debug:
+            print("   [LED: thinking - blue swirl]")
+
     def speaking(self):
-        print("   💡 [LED: speaking - warm flicker]")
-    
+        if self.debug:
+            print("   [LED: speaking - warm flicker]")
+
     def dramatic_reveal(self):
-        print("   💡 [LED: ✨ FLASH! ✨]")
+        if self.debug:
+            print("   [LED: FLASH!]")
         time.sleep(0.3)
-    
+
     def goodbye(self):
-        print("   💡 [LED: fading to darkness...]")
+        if self.debug:
+            print("   [LED: fading to darkness...]")
 
 
 # =============================================================================
@@ -501,21 +509,23 @@ class DummyLEDController(LEDController):
 # =============================================================================
 
 def create_led_controller(
-    controller_type: str = 'auto',
+    controller_type: str = 'dummy',
+    debug: bool = False,
     **kwargs
 ) -> LEDController:
     """
     Create an LED controller based on type or auto-detect.
-    
+
     Args:
         controller_type: 'wled', 'serial', 'dummy', or 'auto'
+        debug: Enable debug output for dummy controller
         **kwargs: Passed to controller constructor
-        
+
     Returns:
         LEDController instance
     """
     if controller_type == 'dummy':
-        return DummyLEDController()
+        return DummyLEDController(debug=debug)
     
     if controller_type == 'wled':
         return WLEDController(**kwargs)
@@ -542,65 +552,9 @@ def create_led_controller(
         
         # Fall back to dummy
         print("No LED hardware found, using dummy controller")
-        return DummyLEDController()
+        return DummyLEDController(debug=debug)
     
     raise ValueError(f"Unknown controller type: {controller_type}")
-
-
-# =============================================================================
-# Integration Example
-# =============================================================================
-
-INTEGRATION_EXAMPLE = '''
-# ============================================================
-# How to integrate LEDs with crystal_ball.py
-# ============================================================
-
-# 1. Add import at top of crystal_ball.py:
-from led_integration import create_led_controller
-
-# 2. In CrystalBall.__init__, add:
-self.leds = create_led_controller(
-    controller_type='wled',  # or 'auto'
-    host='192.168.1.100'     # Your WLED IP
-)
-self.leds.idle()
-
-# 3. In CrystalBall.run(), add LED state changes:
-
-def run(self):
-    self.leds.idle()
-    self.tts.speak("Welcome, seeker...")
-    
-    while True:
-        print("Listening...")
-        self.leds.listening()  # 👈 Add
-        
-        audio = self.stt.record_until_silence()
-        
-        if audio is None:
-            self.leds.idle()   # 👈 Add
-            continue
-        
-        self.leds.thinking()   # 👈 Add
-        question = self.stt.transcribe(audio)
-        
-        if "goodbye" in question.lower():
-            self.leds.goodbye()  # 👈 Add
-            self.tts.speak("Until we meet again...")
-            break
-        
-        fortune = self.llm.generate(question)
-        
-        self.leds.dramatic_reveal()  # 👈 Add (optional flash)
-        # speaking state is set by dramatic_reveal
-        
-        self.tts.speak(fortune)
-        
-        self.leds.idle()  # 👈 Add
-
-# ============================================================
-'''
 
 
 # =============================================================================
@@ -640,7 +594,7 @@ def main():
         return
     
     if args.demo:
-        print("\n🔮 Running Crystal Ball LED Demo\n")
+        print("\nRunning Crystal Ball LED Demo\n")
         
         print("State: IDLE (waiting for seeker)")
         controller.idle()
@@ -665,7 +619,7 @@ def main():
         print("State: GOODBYE (seeker departs)")
         controller.goodbye()
         
-        print("\n✨ Demo complete!\n")
+        print("\nDemo complete!\n")
         return
     
     # Interactive mode

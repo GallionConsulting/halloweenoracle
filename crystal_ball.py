@@ -25,6 +25,8 @@ from pathlib import Path
 
 import yaml
 
+from led_integration import create_led_controller
+
 import numpy as np
 import sounddevice as sd
 
@@ -56,7 +58,7 @@ MIN_SPEECH_DURATION = 0.5     # Minimum speech to process
 # =============================================================================
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PERSONAS_DIR = SCRIPT_DIR.parent / "personas"
+PERSONAS_DIR = SCRIPT_DIR / "personas"
 
 REQUIRED_FIELDS = [
     "name", "prompt_label", "init_label",
@@ -351,7 +353,7 @@ class TextToSpeech:
         # Warn if the voice model file doesn't exist
         voice_path = Path(voice)
         if not voice_path.is_absolute():
-            voice_path = SCRIPT_DIR.parent / voice
+            voice_path = SCRIPT_DIR / voice
         if not voice_path.is_file():
             print(f"Warning: Voice model not found: {voice_path}")
             print("  TTS will likely fail. Check the 'voice' field in your persona YAML.")
@@ -450,7 +452,9 @@ class CrystalBall:
         self,
         persona: dict,
         mic_device: int | None = None,
-        debug: bool = False
+        debug: bool = False,
+        led_type: str = "dummy",
+        wled_host: str = "192.168.1.100",
     ):
         self.debug = debug
         self.persona = persona
@@ -479,6 +483,11 @@ class CrystalBall:
             sentence_silence=persona["sentence_silence"],
             speaker=persona["speaker"],
         )
+        self.leds = create_led_controller(
+            controller_type=led_type,
+            debug=debug,
+            host=wled_host,
+        )
         self.fillers = self.tts.pre_generate_fillers(persona["fillers"])
         self.filler_index = 0
 
@@ -493,21 +502,25 @@ class CrystalBall:
         # Opening announcement
         if not self.tts.speak(self.persona["greeting"]):
             print("Warning: Greeting TTS failed — check voice model path")
+        self.leds.idle()
 
         while True:
             print(f"\n  {self._msg('awaiting')}")
             print(f"   {self._msg('speak_now')}\n")
 
             # Record speech
+            self.leds.listening()
             audio = self.stt.record_until_silence()
 
             if audio is None or len(audio) < SAMPLE_RATE * MIN_SPEECH_DURATION:
                 if self.debug:
                     print("   [No speech detected]")
+                self.leds.idle()
                 continue
 
             # Transcribe
             print(f"  {self._msg('consulting')}")
+            self.leds.thinking()
             start_time = time.time()
 
             question = self.stt.transcribe(audio)
@@ -517,12 +530,14 @@ class CrystalBall:
 
             if not question or len(question) < 3:
                 self.tts.speak(self._msg("no_speech"))
+                self.leds.idle()
                 continue
 
             print(f"   Question: \"{question}\"")
 
             # Check for exit
             if any(word in question.lower() for word in ['goodbye', 'bye', 'exit', 'quit']):
+                self.leds.goodbye()
                 self.tts.speak(self.persona["farewell"])
                 print(f"\n  {self._msg('departed')}\n")
                 break
@@ -549,11 +564,13 @@ class CrystalBall:
             print(f"\n   {fortune}\n")
 
             # Speak the fortune
+            self.leds.dramatic_reveal()
             self.tts.speak(fortune)
 
             # Brief pause before next question
             time.sleep(0.5)
             self.tts.speak(self._msg("next_question"))
+            self.leds.idle()
 
 
 def main():
@@ -616,6 +633,22 @@ def main():
         action='store_true',
         help='Enable debug output'
     )
+    parser.add_argument(
+        '--led-type',
+        default='dummy',
+        choices=['wled', 'serial', 'dummy', 'auto'],
+        help='LED controller type (default: dummy)'
+    )
+    parser.add_argument(
+        '--wled-host',
+        default='192.168.1.100',
+        help='WLED device IP address (default: 192.168.1.100)'
+    )
+    parser.add_argument(
+        '--no-leds',
+        action='store_true',
+        help='Disable LEDs (same as --led-type dummy)'
+    )
 
     args = parser.parse_args()
 
@@ -640,11 +673,15 @@ def main():
     if args.whisper_model is not None:
         persona["whisper_model"] = args.whisper_model
 
+    led_type = 'dummy' if args.no_leds else args.led_type
+
     try:
         ball = CrystalBall(
             persona=persona,
             mic_device=args.mic_device,
             debug=args.debug,
+            led_type=led_type,
+            wled_host=args.wled_host,
         )
         ball.run()
     except KeyboardInterrupt:

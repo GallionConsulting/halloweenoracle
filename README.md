@@ -27,6 +27,7 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 ./run.sh --persona mordecai           # Baron Mordecai
 ./run.sh --model mistral              # Use Mistral 7B instead of Llama 3.2
 ./run.sh --length-scale 1.4           # Slower, more dramatic speech
+./run.sh --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
 ```
 
 ## Installation
@@ -114,7 +115,7 @@ venv/bin/python3 test_components.py
 # Or test individually:
 ollama run llama3.2:3b "Say hello in a spooky voice"
 echo "The spirits are listening" | piper --model voices/en_GB-alba-medium.onnx --length-scale 1.2 --output-raw | aplay -r 22050 -f S16_LE
-python .planning/test_microphone.py
+python .planning/test_microphone.py       # Mic input test
 ```
 
 ## Usage Options
@@ -130,6 +131,9 @@ python .planning/test_microphone.py
 --mic-device ID       Microphone device index
 --list-devices        List audio devices and exit
 --debug               Show timing and debug info
+--led-type TYPE       LED controller: wled, serial, dummy, auto (default: dummy)
+--wled-host HOST      WLED device IP address (default: 192.168.1.100)
+--no-leds             Disable LEDs (same as --led-type dummy)
 ```
 
 ### Speech Tuning
@@ -189,9 +193,33 @@ You can also load a persona from any path:
 
 Each persona YAML controls the character's identity, voice, LLM settings, system prompt, filler phrases, and all UI messages. See `personas/zelda.yaml` for the full schema.
 
+### LED Strip Integration
+
+The crystal ball supports WS2812B/NeoPixel LED strips via [WLED](https://kno.wled.ge/) firmware. LEDs change color/effect at each stage of the fortune-telling loop (idle, listening, thinking, dramatic reveal, speaking, goodbye).
+
+By default LEDs are disabled (dummy controller, silent). To enable:
+
+```bash
+# WLED over WiFi (recommended)
+./run.sh --led-type wled --wled-host 192.168.4.1
+
+# Auto-detect (probes WLED then serial, falls back to dummy)
+./run.sh --led-type auto
+
+# Test LED effects standalone
+venv/bin/python3 led_integration.py --type dummy --demo
+```
+
+**WLED setup:**
+1. Get a WLED-compatible controller (ESP8266/ESP32)
+2. Flash WLED firmware: https://install.wled.me/
+3. Connect your LED strip and configure WiFi
+4. Pass the device IP with `--wled-host`
+
+Serial (Arduino/Pico) controllers are also supported via `--led-type serial`. See `led_integration.py` for the single-character protocol.
+
 ### Other Customization
 
-- **LED effects** - See `.planning/led_integration.py` for WLED (WiFi), Arduino/Pico (serial), and dummy controllers
 - **Cloud LLM** - See `.planning/cloud_api_example.py` for Claude and OpenAI API integration (requires internet)
 
 ## Hardware
@@ -219,16 +247,16 @@ halloweenoracle/
 ├── README.md
 ├── run.sh                    # Launch script (activates venv, runs app)
 ├── run-claude.sh             # Alternative launch script
+├── crystal_ball.py           # Main application
+├── led_integration.py        # LED controllers (WLED/serial/dummy)
 ├── test_components.py        # Verify all components work
 ├── voices/                   # Piper TTS voice models (not in repo, see install step 5)
 ├── personas/                 # Persona definitions (YAML)
 │   ├── zelda.yaml            # Madam Zelda (default)
 │   └── mordecai.yaml         # Baron Mordecai
 └── .planning/
-    ├── crystal_ball.py       # Main application
     ├── requirements.txt      # Python dependencies
     ├── test_microphone.py    # Audio device testing
-    ├── led_integration.py    # LED control examples (WLED/serial/dummy)
     ├── cloud_api_example.py  # Cloud LLM alternative
     ├── parakeet_alternative.py # NVIDIA Parakeet STT alternative
     └── RESEARCH_NOTES.md     # Background research & links

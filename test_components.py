@@ -124,6 +124,22 @@ def test_playback(audio_data):
     return True
 
 
+def test_leds():
+    """Test that the LED factory creates a dummy controller with callable methods."""
+    print("\n[5/5] Testing LED Controller...")
+    from led_integration import create_led_controller
+
+    controller = create_led_controller(controller_type='dummy', debug=True)
+
+    for method_name in ['idle', 'listening', 'thinking', 'speaking', 'dramatic_reveal', 'goodbye']:
+        method = getattr(controller, method_name)
+        method()
+        print(f"  {method_name}() OK")
+
+    print("  PASS")
+    return True
+
+
 def main():
     print("=" * 50)
     print("  Crystal Ball Component Test")
@@ -140,8 +156,10 @@ def main():
     if audio_data:
         results["playback"] = test_playback(audio_data)
     else:
-        print("\n[4/4] Skipping playback (no TTS audio)")
+        print("\n[4/5] Skipping playback (no TTS audio)")
         results["playback"] = False
+
+    results["leds"] = test_leds()
 
     print("\n" + "=" * 50)
     print("  Results")
@@ -156,7 +174,7 @@ def main():
 
     if all_ok:
         print("\nYou can now run the full application:")
-        print(f"  venv/bin/python3 .planning/crystal_ball.py --voice {VOICE_MODEL} --debug")
+        print(f"  venv/bin/python3 crystal_ball.py --voice {VOICE_MODEL} --debug")
 
     return 0 if all_ok else 1
 
