@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -215,18 +216,32 @@ class FortuneGenerator:
         temperature: float = 0.8,
         num_predict: int = 150,
         llm_error_message: str = "",
+        debug: bool = False,
     ):
         self.model = model
         self.system_prompt = system_prompt
         self.temperature = temperature
         self.num_predict = num_predict
         self.llm_error_message = llm_error_message
+        self.debug = debug
         self.conversation_history = []
 
-        # Test connection
+        # Test connection and validate model
         try:
-            ollama.list()
+            response = ollama.list()
+            available_models = [m.model for m in response.models]
+            if model not in available_models:
+                # Also check without :latest suffix
+                alt = model if ':' in model else f"{model}:latest"
+                if alt not in available_models:
+                    print(f"\nError: Model '{model}' not found in Ollama.")
+                    if available_models:
+                        print(f"  Available models: {', '.join(sorted(available_models))}")
+                    print(f"\n  To fix: ollama pull {model}")
+                    raise RuntimeError(f"Model '{model}' not available")
             print(f"LLM ready (using {model}).")
+        except RuntimeError:
+            raise
         except Exception as e:
             print(f"Error: Cannot connect to Ollama. Is it running?")
             print(f"  Start with: ollama serve")
@@ -258,6 +273,20 @@ class FortuneGenerator:
             )
 
             fortune = response['message']['content']
+
+            # Strip <think>...</think> blocks (e.g. qwen3 thinking mode)
+            raw_fortune = fortune
+            fortune = re.sub(r'<think>[\s\S]*?</think>', '', fortune)
+            # Handle unclosed <think> tag (truncated output)
+            fortune = re.sub(r'<think>[\s\S]*$', '', fortune)
+            fortune = fortune.strip()
+
+            if raw_fortune != fortune and self.debug:
+                print(f"   [Stripped <think> tags from LLM response]")
+
+            if not fortune:
+                print("Warning: LLM response was empty after stripping <think> tags")
+                return self.llm_error_message
 
             # Add to history
             self.conversation_history.append({
@@ -344,7 +373,10 @@ class TextToSpeech:
             audio = self._synthesize(phrase)
             if audio is not None:
                 fillers.append(audio)
-        print(f"  {len(fillers)} filler clips ready.")
+        if len(fillers) == 0 and len(phrases) > 0:
+            print("Warning: All filler phrase TTS failed — fillers will be skipped")
+        else:
+            print(f"  {len(fillers)} filler clips ready.")
         return fillers
 
     def play_filler(self, filler: np.ndarray) -> threading.Event:
@@ -360,14 +392,16 @@ class TextToSpeech:
         thread.start()
         return done_event
 
-    def speak(self, text: str) -> None:
-        """Convert text to speech and play it."""
+    def speak(self, text: str) -> bool:
+        """Convert text to speech and play it. Returns True on success."""
         audio = self._synthesize(text)
         if audio is None:
-            print("Warning: No audio generated")
-            return
+            snippet = text[:60] + ("..." if len(text) > 60 else "")
+            print(f"Warning: TTS failed for: {snippet}")
+            return False
         sd.play(audio, samplerate=self.sample_rate)
         sd.wait()
+        return True
 
 
 # =============================================================================
@@ -402,6 +436,7 @@ class CrystalBall:
             temperature=persona["temperature"],
             num_predict=persona["num_predict"],
             llm_error_message=persona["messages"]["llm_error"],
+            debug=debug,
         )
         self.tts = TextToSpeech(
             voice=persona["voice"],
@@ -421,7 +456,8 @@ class CrystalBall:
     def run(self) -> None:
         """Main loop - listen, process, respond."""
         # Opening announcement
-        self.tts.speak(self.persona["greeting"])
+        if not self.tts.speak(self.persona["greeting"]):
+            print("Warning: Greeting TTS failed — check voice model path")
 
         while True:
             print(f"\n  {self._msg('awaiting')}")
