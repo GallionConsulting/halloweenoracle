@@ -279,10 +279,12 @@ class FortuneGenerator:
             fortune = re.sub(r'<think>[\s\S]*?</think>', '', fortune)
             # Handle unclosed <think> tag (truncated output)
             fortune = re.sub(r'<think>[\s\S]*$', '', fortune)
+            # Strip markdown emphasis (*/_) so TTS doesn't say "asterisk"
+            fortune = re.sub(r'(\*{1,3}|_{1,3})(.+?)\1', r'\2', fortune)
             fortune = fortune.strip()
 
             if raw_fortune != fortune and self.debug:
-                print(f"   [Stripped <think> tags from LLM response]")
+                print(f"   [Cleaned LLM response (think tags / markdown)]")
 
             if not fortune:
                 print("Warning: LLM response was empty after stripping <think> tags")
