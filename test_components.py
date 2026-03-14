@@ -126,16 +126,51 @@ def test_playback(audio_data):
 
 def test_leds():
     """Test that the LED factory creates a dummy controller with callable methods."""
-    print("\n[5/5] Testing LED Controller...")
+    print("\n[5/7] Testing LED Controller...")
     from led_integration import create_led_controller
 
     controller = create_led_controller(controller_type='dummy', debug=True)
 
-    for method_name in ['idle', 'listening', 'thinking', 'speaking', 'dramatic_reveal', 'goodbye']:
+    for method_name in ['sleeping', 'idle', 'listening', 'thinking', 'speaking', 'dramatic_reveal', 'goodbye', 'off']:
         method = getattr(controller, method_name)
         method()
         print(f"  {method_name}() OK")
 
+    print("  PASS")
+    return True
+
+
+def test_clear_history():
+    """Test that FortuneGenerator.clear_history() resets conversation state."""
+    print("\n[6/7] Testing FortuneGenerator.clear_history()...")
+    from crystal_ball import FortuneGenerator
+
+    gen = FortuneGenerator(
+        model="llama3.2:3b",
+        system_prompt="You are a test.",
+        llm_error_message="error",
+    )
+    # Generate a response to populate history
+    gen.generate("Hello")
+    assert len(gen.conversation_history) > 0, "History should not be empty after generate()"
+    print(f"  History length after generate: {len(gen.conversation_history)}")
+
+    gen.clear_history()
+    assert len(gen.conversation_history) == 0, "History should be empty after clear_history()"
+    print("  History cleared successfully")
+    print("  PASS")
+    return True
+
+
+def test_state_enum():
+    """Test that the State enum has all expected states."""
+    print("\n[7/7] Testing State enum...")
+    from crystal_ball import State
+
+    expected = {'RESTING', 'GREETING', 'LISTENING', 'THINKING', 'SPEAKING', 'FAREWELL', 'SHUTDOWN'}
+    actual = {s.name for s in State}
+    assert actual == expected, f"Expected {expected}, got {actual}"
+    print(f"  States: {', '.join(s.value for s in State)}")
     print("  PASS")
     return True
 
@@ -160,6 +195,8 @@ def main():
         results["playback"] = False
 
     results["leds"] = test_leds()
+    results["clear_history"] = test_clear_history()
+    results["state_enum"] = test_state_enum()
 
     print("\n" + "=" * 50)
     print("  Results")

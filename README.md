@@ -6,12 +6,25 @@ An offline, AI-powered Halloween fortune teller prop. Visitors approach a crysta
 
 ## How It Works
 
-1. **Listen** - Faster-Whisper with Silero VAD captures the visitor's question via microphone
-2. **Think** - Ollama generates an in-character fortune using a local LLM (a filler phrase plays while it "consults the spirits")
-3. **Speak** - Piper TTS speaks the fortune aloud through the speakers
-4. **Loop** - The crystal ball awaits the next question (say "goodbye" to end the session)
+The crystal ball runs as a continuous state machine designed to operate unattended as a prop:
 
-Expected end-to-end latency is 2-4 seconds — a natural "communing with the spirits" pause.
+```
+RESTING ──(wake trigger)──> GREETING ──> LISTENING ──> THINKING ──> SPEAKING ──┐
+   ^                                                                           │
+   │              ┌──(silence timeout or max questions reached)─────────────────┘
+   │              v
+   │           FAREWELL
+   └──────────────┘
+```
+
+1. **Rest** - The ball sleeps with a dim purple glow, waiting for a wake trigger (button press, keyboard, foot pedal)
+2. **Greet** - A visitor triggers the ball, which wakes with a dramatic light flash and speaks its greeting
+3. **Listen** - Faster-Whisper with Silero VAD captures the visitor's question via microphone
+4. **Think** - Ollama generates an in-character fortune using a local LLM (a filler phrase plays while it "consults the spirits")
+5. **Speak** - Piper TTS speaks the fortune aloud through the speakers
+6. **Loop or Farewell** - After each answer, the ball listens for the next question. The session ends automatically after a configurable number of questions or a silence timeout, then the ball fades back to sleep.
+
+Expected end-to-end latency is 2-4 seconds — a natural "communing with the spirits" pause. Ctrl+C or SIGTERM triggers a clean shutdown (LEDs off, resources released) from any state.
 
 ## Personas
 
@@ -23,8 +36,10 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 ## Quick Start
 
 ```bash
-./run.sh                              # Default (Madam Zelda)
+./run.sh                              # Default (Madam Zelda, stdin wake trigger)
 ./run.sh --persona mordecai           # Baron Mordecai
+./run.sh --wake-device /dev/input/event5  # Wake on USB button/keyboard press
+./run.sh --max-questions 5            # 5 questions per session
 ./run.sh --model mistral              # Use Mistral 7B instead of Llama 3.2
 ./run.sh --length-scale 1.4           # Slower, more dramatic speech
 ./run.sh --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
@@ -121,19 +136,24 @@ python .planning/test_microphone.py       # Mic input test
 ## Usage Options
 
 ```
---persona NAME/PATH   Fortune teller persona name or path to YAML file (default: zelda)
---model MODEL         Ollama model (overrides persona default)
---whisper-model MODEL Whisper model size (overrides persona default)
---voice VOICE         Piper voice model path (overrides persona default)
---length-scale N      Speech speed, higher = slower (overrides persona default)
---sentence-silence N  Pause between sentences in seconds (overrides persona default)
---speaker ID          Speaker ID for multi-speaker voice models (overrides persona default)
---mic-device ID       Microphone device index
---list-devices        List audio devices and exit
---debug               Show timing and debug info
---led-type TYPE       LED controller: wled, serial, dummy, auto (default: dummy)
---wled-host HOST      WLED device IP address (default: 192.168.1.100)
---no-leds             Disable LEDs (same as --led-type dummy)
+--persona NAME/PATH       Fortune teller persona name or path to YAML file (default: zelda)
+--model MODEL             Ollama model (overrides persona default)
+--whisper-model MODEL     Whisper model size (overrides persona default)
+--voice VOICE             Piper voice model path (overrides persona default)
+--length-scale N          Speech speed, higher = slower (overrides persona default)
+--sentence-silence N      Pause between sentences in seconds (overrides persona default)
+--speaker ID              Speaker ID for multi-speaker voice models (overrides persona default)
+--mic-device ID           Microphone device index
+--list-devices            List audio devices and exit
+--debug                   Show timing, state transitions, and debug info
+--led-type TYPE           LED controller: wled, serial, dummy, auto (default: dummy)
+--wled-host HOST          WLED device IP address (default: 192.168.1.100)
+--no-leds                 Disable LEDs (same as --led-type dummy)
+--wake-device PATH        evdev input device for wake trigger (e.g. /dev/input/event5)
+--list-input-devices      List available evdev input devices and exit
+--max-questions N         Max questions per session before farewell (default: 3)
+--silence-timeout SECS    Seconds of silence before ending session (default: 20)
+--llm-timeout SECS        Seconds to wait for LLM before error (default: 45)
 ```
 
 ### Speech Tuning
@@ -161,6 +181,45 @@ done
 ./run.sh --list-devices     # Find your mic's index
 ./run.sh --mic-device 3     # Use that index
 ```
+
+### Wake Trigger Setup
+
+The crystal ball sleeps between visitors and wakes on a physical trigger. Any USB HID device works: keyboard, arcade button, foot pedal, or PIR sensor with a keyboard adapter.
+
+```bash
+# List available input devices
+./run.sh --list-input-devices
+
+# Use a specific device
+./run.sh --wake-device /dev/input/event5
+```
+
+Without `--wake-device`, the ball falls back to stdin (press Enter to wake) — useful for development.
+
+**Permission:** Your user needs read access to `/dev/input/eventN`. Either add your user to the `input` group:
+
+```bash
+sudo usermod -aG input $USER
+# Log out and back in for group change to take effect
+```
+
+Or create a udev rule for your specific device.
+
+**Dependency:** The wake trigger uses the `evdev` Python package (`pip install evdev`), which is Linux-only. It is only imported when `--wake-device` is used or `--list-input-devices` is called.
+
+### Session Management
+
+Each visitor session is bounded by two limits to keep the prop moving between visitors:
+
+| Setting | Default | CLI Flag | Persona YAML Key |
+|---------|---------|----------|-------------------|
+| Max questions per session | 3 | `--max-questions` | `max_questions` |
+| Silence timeout (no speech) | 20s | `--silence-timeout` | `silence_timeout` |
+| LLM response timeout | 45s | `--llm-timeout` | — |
+
+When either limit is reached, the ball speaks a farewell message and returns to the resting state. Conversation history is cleared between sessions.
+
+Persona YAML values are used as defaults and can be overridden by CLI flags.
 
 ## LLM Model Options
 
@@ -228,6 +287,7 @@ Serial (Arduino/Pico) controllers are also supported via `--led-type serial`. Se
 - **Microphone:** USB or 3.5mm
 - **Speakers:** Any powered speakers
 - **Optional:** WS2812B LED strip + ESP8266 with [WLED](https://kno.wled.ge/) firmware
+- **Optional:** Wake trigger — USB arcade button, foot pedal, keyboard, or PIR sensor with keyboard HID adapter
 
 ## Troubleshooting
 
@@ -239,6 +299,8 @@ Serial (Arduino/Pico) controllers are also supported via `--led-type serial`. Se
 | Audio not working | Run `./run.sh --list-devices` and try `--mic-device` |
 | Ollama connection refused | Run `ollama serve`; verify with `curl http://localhost:11434/api/tags` |
 | Missing voice models | See [Download Voice Models](#5-download-voice-models) above |
+| Wake trigger permission denied | Add user to `input` group: `sudo usermod -aG input $USER` then re-login |
+| evdev not installed | `pip install evdev` (only needed for `--wake-device`) |
 
 ## Project Structure
 

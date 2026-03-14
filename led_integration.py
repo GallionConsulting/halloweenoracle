@@ -35,35 +35,45 @@ from typing import Optional
 
 class LEDController(ABC):
     """Base class for LED controllers."""
-    
+
+    @abstractmethod
+    def sleeping(self):
+        """Very dim resting animation between sessions."""
+        pass
+
     @abstractmethod
     def idle(self):
         """Idle animation while waiting for input."""
         pass
-    
+
     @abstractmethod
     def listening(self):
         """Animation while recording speech."""
         pass
-    
+
     @abstractmethod
     def thinking(self):
         """Animation while processing/generating response."""
         pass
-    
+
     @abstractmethod
     def speaking(self):
         """Animation while speaking the fortune."""
         pass
-    
+
     @abstractmethod
     def dramatic_reveal(self):
         """Brief dramatic effect before speaking fortune."""
         pass
-    
+
     @abstractmethod
     def goodbye(self):
         """Farewell animation when session ends."""
+        pass
+
+    @abstractmethod
+    def off(self):
+        """Turn LEDs fully off (shutdown)."""
         pass
 
 
@@ -277,10 +287,22 @@ class WLEDController(LEDController):
     # State Methods
     # -------------------------------------------------------------------------
     
+    def sleeping(self):
+        """
+        Sleeping state - very dim slow purple breathe.
+
+        Minimal glow to show the prop is powered on but dormant.
+        """
+        self._set_effect(
+            WLED_EFFECTS['breathe'],
+            self.colors['idle'],
+            brightness=20
+        )
+
     def idle(self):
         """
         Idle state - slow mystical pulse.
-        
+
         Purple breathing effect, calm and mysterious.
         Like the crystal ball gently glowing, waiting.
         """
@@ -446,24 +468,30 @@ class SerialLEDController(LEDController):
     def _send(self, command: str):
         self.serial.write(command.encode())
     
+    def sleeping(self):
+        self._send('R')
+
     def idle(self):
         self._send('I')
-    
+
     def listening(self):
         self._send('L')
-    
+
     def thinking(self):
         self._send('T')
-    
+
     def speaking(self):
         self._send('S')
-    
+
     def dramatic_reveal(self):
         self._send('D')
         time.sleep(0.5)
-    
+
     def goodbye(self):
         self._send('G')
+
+    def off(self):
+        self._send('O')
 
 
 # =============================================================================
@@ -477,6 +505,10 @@ class DummyLEDController(LEDController):
         self.debug = debug
         if self.debug:
             print("[LED] Using dummy LED controller (no hardware)")
+
+    def sleeping(self):
+        if self.debug:
+            print("   [LED: sleeping - dim purple breathe]")
 
     def idle(self):
         if self.debug:
@@ -502,6 +534,10 @@ class DummyLEDController(LEDController):
     def goodbye(self):
         if self.debug:
             print("   [LED: fading to darkness...]")
+
+    def off(self):
+        if self.debug:
+            print("   [LED: off]")
 
 
 # =============================================================================

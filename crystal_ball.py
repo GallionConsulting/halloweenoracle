@@ -13,8 +13,10 @@ Usage:
 """
 
 import argparse
+import enum
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -115,6 +117,115 @@ def load_persona(name: str) -> dict:
         sys.exit(1)
 
     return persona
+
+
+# =============================================================================
+# State Machine
+# =============================================================================
+
+class State(enum.Enum):
+    RESTING = "RESTING"
+    GREETING = "GREETING"
+    LISTENING = "LISTENING"
+    THINKING = "THINKING"
+    SPEAKING = "SPEAKING"
+    FAREWELL = "FAREWELL"
+    SHUTDOWN = "SHUTDOWN"
+
+
+# =============================================================================
+# Wake Triggers
+# =============================================================================
+
+class WakeTrigger:
+    """Reads raw input events from an evdev device in a background thread."""
+
+    def __init__(self, device_path: str):
+        import evdev
+        self._dev = evdev.InputDevice(device_path)
+        self._event = threading.Event()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._reader, daemon=True)
+        self._thread.start()
+        print(f"Wake trigger ready: {self._dev.name} ({device_path})")
+
+    def _reader(self):
+        import evdev
+        try:
+            for event in self._dev.read_loop():
+                if self._stop.is_set():
+                    break
+                # Key-down events only (value == 1)
+                if event.type == evdev.ecodes.EV_KEY and event.value == 1:
+                    self._event.set()
+        except OSError as e:
+            print(f"Wake trigger device error: {e}")
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Wait for a wake event. Returns True if triggered, False on timeout."""
+        result = self._event.wait(timeout=timeout)
+        if result:
+            self._event.clear()
+        return result
+
+    def close(self):
+        self._stop.set()
+        try:
+            self._dev.close()
+        except Exception:
+            pass
+
+
+class StdinWakeTrigger:
+    """Fallback wake trigger that waits for Enter on stdin."""
+
+    def __init__(self):
+        self._event = threading.Event()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._reader, daemon=True)
+        self._thread.start()
+        print("Wake trigger ready: stdin (press Enter to wake)")
+
+    def _reader(self):
+        import select
+        while not self._stop.is_set():
+            # Use select so we can check _stop periodically
+            ready, _, _ = select.select([sys.stdin], [], [], 1.0)
+            if ready:
+                try:
+                    sys.stdin.readline()
+                    self._event.set()
+                except EOFError:
+                    break
+
+    def wait(self, timeout: float | None = None) -> bool:
+        result = self._event.wait(timeout=timeout)
+        if result:
+            self._event.clear()
+        return result
+
+    def close(self):
+        self._stop.set()
+
+
+def list_input_devices():
+    """List available evdev input devices."""
+    try:
+        import evdev
+    except ImportError:
+        print("Error: evdev not installed. Run: pip install evdev")
+        sys.exit(1)
+
+    devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+    if not devices:
+        print("No input devices found.")
+        print("  Ensure you have permission (add user to 'input' group)")
+        return
+
+    print("\n=== Available Input Devices ===\n")
+    for dev in devices:
+        print(f"  {dev.path:20s}  {dev.name}")
+    print("\nUse --wake-device <path> to select a device.")
 
 
 # =============================================================================
@@ -256,6 +367,10 @@ class FortuneGenerator:
             print(f"  Start with: ollama serve")
             print(f"  Then pull model: ollama pull {model}")
             raise
+
+    def clear_history(self):
+        """Clear conversation history between sessions."""
+        self.conversation_history.clear()
 
     def generate(self, question: str) -> str:
         """Generate a fortune based on the question."""
@@ -446,7 +561,7 @@ class TextToSpeech:
 # =============================================================================
 
 class CrystalBall:
-    """Main application orchestrating all components."""
+    """Main application orchestrating all components via a state machine."""
 
     def __init__(
         self,
@@ -455,10 +570,25 @@ class CrystalBall:
         debug: bool = False,
         led_type: str = "dummy",
         wled_host: str = "192.168.1.100",
+        wake_device: str | None = None,
+        max_questions: int = 3,
+        silence_timeout: float = 20.0,
+        llm_timeout: float = 45.0,
     ):
         self.debug = debug
         self.persona = persona
         self.messages = persona["messages"]
+        self.max_questions = persona.get("max_questions", max_questions)
+        self.silence_timeout = persona.get("silence_timeout", silence_timeout)
+        self.llm_timeout = llm_timeout
+
+        self._state = State.RESTING
+        self._question_count = 0
+        self._shutdown_requested = threading.Event()
+
+        # Install signal handlers
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
 
         label = persona["init_label"]
         print("\n" + "=" * 50)
@@ -491,86 +621,205 @@ class CrystalBall:
         self.fillers = self.tts.pre_generate_fillers(persona["fillers"])
         self.filler_index = 0
 
+        # Wake trigger
+        if wake_device:
+            self.wake_trigger = WakeTrigger(wake_device)
+        else:
+            self.wake_trigger = StdinWakeTrigger()
+
         print("\nAll systems ready!\n")
+
+    def _signal_handler(self, signum, frame):
+        print(f"\n   [Signal {signum} received, shutting down...]")
+        self._shutdown_requested.set()
 
     def _msg(self, key: str) -> str:
         """Return a message string with {name} substituted."""
         return self.messages[key].format(name=self.persona["prompt_label"])
 
-    def run(self) -> None:
-        """Main loop - listen, process, respond."""
-        # Opening announcement
+    # -----------------------------------------------------------------
+    # State handlers
+    # -----------------------------------------------------------------
+
+    def _do_resting(self) -> State:
+        self.leds.sleeping()
+        self._question_count = 0
+        self.llm.clear_history()
+        print(f"\n  [{self.persona['prompt_label']} is resting... waiting for wake trigger]")
+
+        while not self._shutdown_requested.is_set():
+            if self.wake_trigger.wait(timeout=1.0):
+                if self.debug:
+                    print("   [Wake trigger activated]")
+                return State.GREETING
+        return State.SHUTDOWN
+
+    def _do_greeting(self) -> State:
+        if self._shutdown_requested.is_set():
+            return State.SHUTDOWN
+        self.leds.dramatic_reveal()
         if not self.tts.speak(self.persona["greeting"]):
             print("Warning: Greeting TTS failed — check voice model path")
-        self.leds.idle()
+        return State.LISTENING
 
-        while True:
-            print(f"\n  {self._msg('awaiting')}")
-            print(f"   {self._msg('speak_now')}\n")
+    def _do_listening(self) -> State:
+        if self._shutdown_requested.is_set():
+            return State.SHUTDOWN
 
-            # Record speech
-            self.leds.listening()
+        self.leds.listening()
+        print(f"\n  {self._msg('awaiting')}")
+        print(f"   {self._msg('speak_now')}\n")
+
+        # Record with a silence timeout — if no usable speech within
+        # the timeout window, go to farewell (back to sleep).
+        deadline = time.monotonic() + self.silence_timeout
+
+        while time.monotonic() < deadline:
+            if self._shutdown_requested.is_set():
+                return State.SHUTDOWN
+
             audio = self.stt.record_until_silence()
 
+            # No audio at all — loop and try again
             if audio is None or len(audio) < SAMPLE_RATE * MIN_SPEECH_DURATION:
                 if self.debug:
                     print("   [No speech detected]")
-                self.leds.idle()
                 continue
 
-            # Transcribe
+            # Got audio — try to transcribe
             print(f"  {self._msg('consulting')}")
             self.leds.thinking()
             start_time = time.time()
-
             question = self.stt.transcribe(audio)
 
             if self.debug:
                 print(f"   [Transcription took {time.time() - start_time:.2f}s]")
 
             if not question or len(question) < 3:
-                self.tts.speak(self._msg("no_speech"))
-                self.leds.idle()
+                if self.debug:
+                    print("   [Transcription too short, ignoring]")
+                self.leds.listening()
                 continue
 
+            # Good question — move on
             print(f"   Question: \"{question}\"")
+            self._current_question = question
+            return State.THINKING
 
-            # Check for exit
-            if any(word in question.lower() for word in ['goodbye', 'bye', 'exit', 'quit']):
-                self.leds.goodbye()
-                self.tts.speak(self.persona["farewell"])
-                print(f"\n  {self._msg('departed')}\n")
-                break
+        # Timeout expired with no usable speech
+        if self.debug:
+            print(f"   [Silence timeout ({self.silence_timeout}s) — ending session]")
+        return State.FAREWELL
 
-            # Play the next filler while the LLM thinks (cycles 1 through N)
-            filler_done = None
-            if self.fillers:
-                filler = self.fillers[self.filler_index]
-                self.filler_index = (self.filler_index + 1) % len(self.fillers)
-                filler_done = self.tts.play_filler(filler)
+    def _do_thinking(self) -> State:
+        if self._shutdown_requested.is_set():
+            return State.SHUTDOWN
 
-            # Generate fortune (runs while filler plays)
-            start_time = time.time()
-            fortune = self.llm.generate(question)
+        question = self._current_question
+        self.leds.thinking()
 
+        # Play the next filler while the LLM thinks
+        filler_done = None
+        if self.fillers:
+            filler = self.fillers[self.filler_index]
+            self.filler_index = (self.filler_index + 1) % len(self.fillers)
+            filler_done = self.tts.play_filler(filler)
+
+        # Generate fortune with timeout
+        fortune = None
+        llm_error = None
+
+        def _generate():
+            nonlocal fortune, llm_error
+            try:
+                fortune = self.llm.generate(question)
+            except Exception as e:
+                llm_error = e
+
+        start_time = time.time()
+        llm_thread = threading.Thread(target=_generate, daemon=True)
+        llm_thread.start()
+        llm_thread.join(timeout=self.llm_timeout)
+
+        if self.debug:
+            print(f"   [LLM took {time.time() - start_time:.2f}s]")
+
+        # Wait for filler to finish before speaking
+        if filler_done is not None:
+            filler_done.wait()
+            time.sleep(0.3)
+
+        if llm_thread.is_alive() or llm_error or not fortune:
+            print("   [LLM timeout or error]")
+            self.tts.speak(self._msg("llm_error"))
+            return State.LISTENING
+
+        self._current_fortune = fortune
+        return State.SPEAKING
+
+    def _do_speaking(self) -> State:
+        if self._shutdown_requested.is_set():
+            return State.SHUTDOWN
+
+        fortune = self._current_fortune
+        print(f"\n   {fortune}\n")
+
+        self.leds.dramatic_reveal()
+        self.tts.speak(fortune)
+        self._question_count += 1
+
+        if self._question_count >= self.max_questions:
             if self.debug:
-                print(f"   [LLM took {time.time() - start_time:.2f}s]")
+                print(f"   [Max questions ({self.max_questions}) reached]")
+            return State.FAREWELL
 
-            # Wait for filler to finish before speaking the fortune
-            if filler_done is not None:
-                filler_done.wait()
-                time.sleep(0.3)
+        # Brief pause before next question
+        time.sleep(0.5)
+        self.tts.speak(self._msg("next_question"))
+        return State.LISTENING
 
-            print(f"\n   {fortune}\n")
+    def _do_farewell(self) -> State:
+        self.leds.goodbye()
+        # Use session_end message if available, otherwise farewell
+        session_end = self.messages.get("session_end")
+        if session_end:
+            self.tts.speak(session_end)
+        else:
+            self.tts.speak(self.persona["farewell"])
+        print(f"\n  {self._msg('departed')}\n")
+        return State.RESTING
 
-            # Speak the fortune
-            self.leds.dramatic_reveal()
-            self.tts.speak(fortune)
+    def _do_shutdown(self):
+        print(f"\n  {self.persona['messages']['interrupted']}")
+        sd.stop()
+        self.leds.off()
+        self.wake_trigger.close()
+        print("  Shutdown complete.\n")
 
-            # Brief pause before next question
-            time.sleep(0.5)
-            self.tts.speak(self._msg("next_question"))
-            self.leds.idle()
+    # -----------------------------------------------------------------
+    # Main run loop
+    # -----------------------------------------------------------------
+
+    def run(self) -> None:
+        """Run the state machine until shutdown."""
+        dispatch = {
+            State.RESTING: self._do_resting,
+            State.GREETING: self._do_greeting,
+            State.LISTENING: self._do_listening,
+            State.THINKING: self._do_thinking,
+            State.SPEAKING: self._do_speaking,
+            State.FAREWELL: self._do_farewell,
+        }
+
+        self._state = State.RESTING
+
+        while self._state != State.SHUTDOWN:
+            if self.debug:
+                print(f"   [State: {self._state.value}]")
+            handler = dispatch[self._state]
+            self._state = handler()
+
+        self._do_shutdown()
 
 
 def main():
@@ -649,6 +898,34 @@ def main():
         action='store_true',
         help='Disable LEDs (same as --led-type dummy)'
     )
+    parser.add_argument(
+        '--wake-device',
+        default=None,
+        help='evdev input device path for wake trigger (e.g. /dev/input/event5)'
+    )
+    parser.add_argument(
+        '--list-input-devices',
+        action='store_true',
+        help='List available evdev input devices and exit'
+    )
+    parser.add_argument(
+        '--max-questions',
+        type=int,
+        default=3,
+        help='Max questions per session before farewell (default: 3)'
+    )
+    parser.add_argument(
+        '--silence-timeout',
+        type=float,
+        default=20.0,
+        help='Seconds of silence in LISTENING before farewell (default: 20)'
+    )
+    parser.add_argument(
+        '--llm-timeout',
+        type=float,
+        default=45.0,
+        help='Seconds to wait for LLM response before error (default: 45)'
+    )
 
     args = parser.parse_args()
 
@@ -656,6 +933,10 @@ def main():
         print("\n=== Available Audio Devices ===\n")
         print(sd.query_devices())
         print("\nUse --mic-device <number> to select an input device.")
+        sys.exit(0)
+
+    if args.list_input_devices:
+        list_input_devices()
         sys.exit(0)
 
     # Load persona and apply CLI overrides
@@ -682,10 +963,12 @@ def main():
             debug=args.debug,
             led_type=led_type,
             wled_host=args.wled_host,
+            wake_device=args.wake_device,
+            max_questions=args.max_questions,
+            silence_timeout=args.silence_timeout,
+            llm_timeout=args.llm_timeout,
         )
         ball.run()
-    except KeyboardInterrupt:
-        print(f"\n\n{persona['messages']['interrupted']}\n")
     except Exception as e:
         print(f"\nFatal error: {e}")
         if args.debug:
