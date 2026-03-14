@@ -162,9 +162,97 @@ def test_clear_history():
     return True
 
 
+def test_validate_persona_valid():
+    """Test that a valid persona produces no validation errors."""
+    print("\n[7/10] Testing validate_persona (valid persona)...")
+    from crystal_ball import validate_persona, PERSONAS_DIR
+
+    path = PERSONAS_DIR / "zelda.yaml"
+    import yaml
+    with open(path) as f:
+        persona = yaml.safe_load(f)
+
+    errors = validate_persona(persona, path)
+    if errors:
+        print(f"  FAIL - unexpected errors: {errors}")
+        return False
+    print("  No validation errors for zelda.yaml")
+    print("  PASS")
+    return True
+
+
+def test_validate_persona_missing_field():
+    """Test that a missing required field is reported."""
+    print("\n[8/10] Testing validate_persona (missing field)...")
+    from crystal_ball import validate_persona
+
+    persona = {"name": "Test"}  # missing almost everything
+    errors = validate_persona(persona, Path("test.yaml"))
+    has_missing = any("Missing required field" in e for e in errors)
+    if not has_missing:
+        print(f"  FAIL - expected missing field error, got: {errors}")
+        return False
+    print(f"  Got {len(errors)} error(s), including missing fields")
+    print("  PASS")
+    return True
+
+
+def test_validate_persona_wrong_type():
+    """Test that a wrong type is reported."""
+    print("\n[9/10] Testing validate_persona (wrong type)...")
+    from crystal_ball import validate_persona, REQUIRED_FIELDS, REQUIRED_MESSAGES
+
+    # Build a minimal valid persona, then break one field's type
+    persona = {
+        "name": "Test", "prompt_label": "Test", "init_label": "TEST",
+        "voice": "voices/en_GB-alba-medium.onnx",
+        "length_scale": 1.0, "sentence_silence": 0.3,
+        "llm_model": "test", "whisper_model": "base.en",
+        "temperature": 0.8, "num_predict": "150",  # wrong: str instead of int
+        "system_prompt": "test", "greeting": "hi", "farewell": "bye",
+        "fillers": ["hmm"],
+        "messages": {k: "msg" for k in REQUIRED_MESSAGES},
+    }
+    errors = validate_persona(persona, Path("test.yaml"))
+    has_type_err = any("num_predict" in e and "should be int" in e for e in errors)
+    if not has_type_err:
+        print(f"  FAIL - expected type error for num_predict, got: {errors}")
+        return False
+    print(f"  Got type error: {[e for e in errors if 'num_predict' in e][0]}")
+    print("  PASS")
+    return True
+
+
+def test_validate_persona_bad_placeholder():
+    """Test that an unknown message placeholder is reported."""
+    print("\n[10/10] Testing validate_persona (bad placeholder)...")
+    from crystal_ball import validate_persona, REQUIRED_MESSAGES
+
+    messages = {k: "msg" for k in REQUIRED_MESSAGES}
+    messages["awaiting"] = "{name} awaits {title}"  # {title} is unknown
+    persona = {
+        "name": "Test", "prompt_label": "Test", "init_label": "TEST",
+        "voice": "voices/en_GB-alba-medium.onnx",
+        "length_scale": 1.0, "sentence_silence": 0.3,
+        "llm_model": "test", "whisper_model": "base.en",
+        "temperature": 0.8, "num_predict": 150,
+        "system_prompt": "test", "greeting": "hi", "farewell": "bye",
+        "fillers": ["hmm"],
+        "messages": messages,
+    }
+    errors = validate_persona(persona, Path("test.yaml"))
+    has_placeholder_err = any("unknown placeholder" in e and "title" in e for e in errors)
+    if not has_placeholder_err:
+        print(f"  FAIL - expected placeholder error, got: {errors}")
+        return False
+    print(f"  Got placeholder error: {[e for e in errors if 'placeholder' in e][0]}")
+    print("  PASS")
+    return True
+
+
 def test_state_enum():
     """Test that the State enum has all expected states."""
-    print("\n[7/7] Testing State enum...")
+    print("\n[11/11] Testing State enum...")
     from crystal_ball import State
 
     expected = {'RESTING', 'GREETING', 'LISTENING', 'THINKING', 'SPEAKING', 'FAREWELL', 'SHUTDOWN'}
@@ -196,6 +284,10 @@ def main():
 
     results["leds"] = test_leds()
     results["clear_history"] = test_clear_history()
+    results["validate_valid"] = test_validate_persona_valid()
+    results["validate_missing"] = test_validate_persona_missing_field()
+    results["validate_type"] = test_validate_persona_wrong_type()
+    results["validate_placeholder"] = test_validate_persona_bad_placeholder()
     results["state_enum"] = test_state_enum()
 
     print("\n" + "=" * 50)

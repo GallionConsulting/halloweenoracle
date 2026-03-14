@@ -81,6 +81,109 @@ def list_available_personas() -> list[str]:
     return sorted(p.stem for p in PERSONAS_DIR.glob("*.yaml"))
 
 
+FIELD_TYPES = {
+    "name": str,
+    "prompt_label": str,
+    "init_label": str,
+    "voice": str,
+    "llm_model": str,
+    "whisper_model": str,
+    "system_prompt": str,
+    "greeting": str,
+    "farewell": str,
+    "length_scale": (int, float),
+    "sentence_silence": (int, float),
+    "temperature": (int, float),
+    "num_predict": int,
+    "fillers": list,
+    "messages": dict,
+}
+
+OPTIONAL_FIELD_TYPES = {
+    "speaker": (int, type(None)),
+    "max_questions": int,
+    "silence_timeout": (int, float),
+}
+
+MESSAGE_PLACEHOLDERS = {"name"}
+
+
+def validate_persona(persona: dict, path: Path) -> list[str]:
+    """Validate a loaded persona dict and return a list of error strings."""
+    errors = []
+
+    # Required fields
+    missing = [k for k in REQUIRED_FIELDS if k not in persona]
+    if missing:
+        errors.append(f"Missing required field(s): {', '.join(missing)}")
+
+    # Required message keys
+    messages = persona.get("messages", {})
+    if isinstance(messages, dict):
+        missing_msgs = [k for k in REQUIRED_MESSAGES if k not in messages]
+        if missing_msgs:
+            errors.append(f"Missing required message(s): {', '.join(missing_msgs)}")
+
+    # Type validation for required fields
+    for field, expected in FIELD_TYPES.items():
+        if field not in persona:
+            continue
+        value = persona[field]
+        if not isinstance(value, expected):
+            exp_name = expected.__name__ if isinstance(expected, type) else " or ".join(
+                t.__name__ for t in expected
+            )
+            errors.append(
+                f"Field '{field}' should be {exp_name}, got {type(value).__name__} ({value!r})"
+            )
+
+    # Type validation for optional fields
+    for field, expected in OPTIONAL_FIELD_TYPES.items():
+        if field not in persona:
+            continue
+        value = persona[field]
+        if not isinstance(value, expected):
+            exp_name = expected.__name__ if isinstance(expected, type) else " or ".join(
+                t.__name__ for t in expected
+            )
+            errors.append(
+                f"Field '{field}' should be {exp_name}, got {type(value).__name__} ({value!r})"
+            )
+
+    # Fillers element check
+    if "fillers" in persona and isinstance(persona["fillers"], list):
+        for i, item in enumerate(persona["fillers"]):
+            if not isinstance(item, str):
+                errors.append(
+                    f"fillers[{i}] should be str, got {type(item).__name__} ({item!r})"
+                )
+
+    # Message value type and placeholder check
+    if isinstance(messages, dict):
+        for key, value in messages.items():
+            if not isinstance(value, str):
+                errors.append(
+                    f"messages['{key}'] should be str, got {type(value).__name__} ({value!r})"
+                )
+                continue
+            try:
+                value.format(name="test")
+            except KeyError as e:
+                errors.append(
+                    f"Message '{key}' uses unknown placeholder {{{e.args[0]}}}"
+                )
+
+    # Voice file exists
+    if "voice" in persona and isinstance(persona["voice"], str):
+        voice_path = Path(persona["voice"])
+        if not voice_path.is_absolute():
+            voice_path = SCRIPT_DIR / voice_path
+        if not voice_path.is_file():
+            errors.append(f"Voice model file not found: {persona['voice']}")
+
+    return errors
+
+
 def load_persona(name: str) -> dict:
     """Load a persona from a YAML file.
 
@@ -101,19 +204,33 @@ def load_persona(name: str) -> dict:
         print(msg)
         sys.exit(1)
 
-    with open(path) as f:
-        persona = yaml.safe_load(f)
-
-    # Validate required top-level fields
-    missing = [k for k in REQUIRED_FIELDS if k not in persona]
-    if missing:
-        print(f"Persona {path.name} is missing required fields: {', '.join(missing)}")
+    try:
+        with open(path) as f:
+            persona = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        msg = f"Persona {path.name} has a YAML syntax error"
+        if hasattr(e, 'problem_mark') and e.problem_mark is not None:
+            mark = e.problem_mark
+            msg += f" at line {mark.line + 1}, column {mark.column + 1}"
+        if hasattr(e, 'problem') and e.problem:
+            msg += f":\n  {e.problem}"
+        msg += "\nHint: Check for missing quotes, incorrect indentation, or stray characters."
+        print(msg)
         sys.exit(1)
 
-    # Validate required message keys
-    missing_msgs = [k for k in REQUIRED_MESSAGES if k not in persona.get("messages", {})]
-    if missing_msgs:
-        print(f"Persona {path.name} is missing required messages: {', '.join(missing_msgs)}")
+    if persona is None:
+        print(f"Persona {path.name} is empty (no YAML content found).")
+        sys.exit(1)
+
+    if not isinstance(persona, dict):
+        print(f"Persona {path.name} must be a YAML mapping, got {type(persona).__name__}.")
+        sys.exit(1)
+
+    errors = validate_persona(persona, path)
+    if errors:
+        print(f"Persona {path.name} has {len(errors)} validation error(s):")
+        for err in errors:
+            print(f"  - {err}")
         sys.exit(1)
 
     return persona
@@ -611,7 +728,7 @@ class CrystalBall:
             voice=persona["voice"],
             length_scale=persona["length_scale"],
             sentence_silence=persona["sentence_silence"],
-            speaker=persona["speaker"],
+            speaker=persona.get("speaker"),
         )
         self.leds = create_led_controller(
             controller_type=led_type,
@@ -926,6 +1043,12 @@ def main():
         default=45.0,
         help='Seconds to wait for LLM response before error (default: 45)'
     )
+    parser.add_argument(
+        '--validate-persona',
+        metavar='NAME',
+        default=None,
+        help='Validate a persona file and exit without loading heavy dependencies'
+    )
 
     args = parser.parse_args()
 
@@ -937,6 +1060,12 @@ def main():
 
     if args.list_input_devices:
         list_input_devices()
+        sys.exit(0)
+
+    if args.validate_persona is not None:
+        # Validate only — no heavy imports needed
+        persona = load_persona(args.validate_persona)
+        print(f"Persona '{persona['name']}' ({args.validate_persona}) is valid.")
         sys.exit(0)
 
     # Load persona and apply CLI overrides

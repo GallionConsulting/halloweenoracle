@@ -124,6 +124,9 @@ cd ..
 ### 6. Verify Setup
 
 ```bash
+# Validate persona files (fast, no heavy dependencies)
+venv/bin/python3 crystal_ball.py --validate-persona zelda
+
 # Test all components at once
 venv/bin/python3 test_components.py
 
@@ -151,6 +154,7 @@ python .planning/test_microphone.py       # Mic input test
 --no-leds                 Disable LEDs (same as --led-type dummy)
 --wake-device PATH        evdev input device for wake trigger (e.g. /dev/input/event5)
 --list-input-devices      List available evdev input devices and exit
+--validate-persona NAME   Validate a persona file and exit (no heavy dependencies loaded)
 --max-questions N         Max questions per session before farewell (default: 3)
 --silence-timeout SECS    Seconds of silence before ending session (default: 20)
 --llm-timeout SECS        Seconds to wait for LLM before error (default: 45)
@@ -248,6 +252,12 @@ You can also load a persona from any path:
 
 ```bash
 ./run.sh --persona /path/to/custom.yaml
+```
+
+Validate your persona file before running (checks for YAML syntax errors, missing fields, wrong types, bad message placeholders, and missing voice files):
+
+```bash
+./run.sh --validate-persona witch
 ```
 
 Each persona YAML controls the character's identity, voice, LLM settings, system prompt, filler phrases, and all UI messages. See `personas/zelda.yaml` for the full schema.
