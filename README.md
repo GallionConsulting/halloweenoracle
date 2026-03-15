@@ -35,6 +35,7 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 
 ## Quick Start
 
+**Linux / macOS:**
 ```bash
 ./run.sh                              # Default (Madam Zelda, stdin wake trigger)
 ./run.sh --persona mordecai           # Baron Mordecai
@@ -45,10 +46,23 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 ./run.sh --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
 ```
 
+**Windows (PowerShell):**
+```powershell
+venv\Scripts\python crystal_ball.py --debug                          # Default (Madam Zelda, stdin wake trigger)
+venv\Scripts\python crystal_ball.py --debug --persona mordecai       # Baron Mordecai
+venv\Scripts\python crystal_ball.py --debug --max-questions 5        # 5 questions per session
+venv\Scripts\python crystal_ball.py --debug --model mistral          # Use Mistral 7B instead of Llama 3.2
+venv\Scripts\python crystal_ball.py --debug --length-scale 1.4       # Slower, more dramatic speech
+venv\Scripts\python crystal_ball.py --debug --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
+```
+
+> **Note:** The `--wake-device` flag uses `evdev`, which is Linux-only. On Windows, use the default stdin wake trigger (press Enter to wake).
+
 ## Installation
 
 ### 1. Clone and Set Up Python Environment
 
+**Linux / macOS:**
 ```bash
 git clone https://github.com/GallionConsulting/halloweenoracle.git
 cd halloweenoracle
@@ -56,11 +70,30 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/GallionConsulting/halloweenoracle.git
+cd halloweenoracle
+python -m venv venv
+venv\Scripts\Activate.ps1
+```
+
 ### 2. System Dependencies
 
+**Linux (Debian/Ubuntu):**
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg portaudio19-dev python3-pip
+```
+
+**Windows:**
+```powershell
+# Install ffmpeg (pick one):
+winget install Gyan.FFmpeg          # via winget
+# or: choco install ffmpeg          # via Chocolatey
+
+# PortAudio is bundled with the sounddevice Python package on Windows — no separate install needed.
+# python3-pip is included with the Python installer from python.org (ensure "Add to PATH" is checked).
 ```
 
 ### 3. Python Dependencies
@@ -71,12 +104,22 @@ pip install -r .planning/requirements.txt
 
 ### 4. Ollama (Local LLM)
 
+**Linux:**
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ollama pull llama3.2:3b
 ```
 
-**Vulkan acceleration (AMD GPUs):** Add these to `/etc/systemd/system/ollama.service` under `[Service]`:
+**Windows:**
+
+Download and run the installer from [ollama.com/download](https://ollama.com/download), then:
+```powershell
+ollama pull llama3.2:3b
+```
+
+#### Vulkan Acceleration (AMD GPUs)
+
+**Linux:** Add these to `/etc/systemd/system/ollama.service` under `[Service]`:
 
 ```ini
 Environment="OLLAMA_VULKAN=1"
@@ -84,6 +127,14 @@ Environment="OLLAMA_FLASH_ATTENTION=1"
 ```
 
 Then reload: `sudo systemctl daemon-reload && sudo systemctl restart ollama`
+
+**Windows (PowerShell — set as persistent user environment variables):**
+```powershell
+[Environment]::SetEnvironmentVariable("OLLAMA_VULKAN", "1", "User")
+[Environment]::SetEnvironmentVariable("OLLAMA_FLASH_ATTENTION", "1", "User")
+```
+
+Then restart the Ollama application (quit from the system tray and relaunch, or restart the `Ollama` service in Task Manager > Services).
 
 ### 5. Download Voice Models
 
@@ -95,6 +146,7 @@ Voice model files (`.onnx` + `.onnx.json`) are not included in this repo due to 
 
 For each voice, you need **both** the `.onnx` model file and its `.onnx.json` config file. Quick download example:
 
+**Linux / macOS:**
 ```bash
 mkdir -p voices
 cd voices
@@ -106,6 +158,22 @@ wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medi
 # Default voice for Baron Mordecai (multi-speaker, uses speaker 2 "obadiah")
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx.json
+
+cd ..
+```
+
+**Windows (PowerShell):**
+```powershell
+New-Item -ItemType Directory -Force -Path voices
+cd voices
+
+# Default voice for Madam Zelda
+Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx" -OutFile "en_GB-alba-medium.onnx"
+Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx.json" -OutFile "en_GB-alba-medium.onnx.json"
+
+# Default voice for Baron Mordecai (multi-speaker, uses speaker 2 "obadiah")
+Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx" -OutFile "en_GB-semaine-medium.onnx"
+Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx.json" -OutFile "en_GB-semaine-medium.onnx.json"
 
 cd ..
 ```
@@ -123,6 +191,7 @@ cd ..
 
 ### 6. Verify Setup
 
+**Linux / macOS:**
 ```bash
 # Validate persona files (fast, no heavy dependencies)
 venv/bin/python3 crystal_ball.py --validate-persona zelda
@@ -133,6 +202,22 @@ venv/bin/python3 test_components.py
 # Or test individually:
 ollama run llama3.2:3b "Say hello in a spooky voice"
 echo "The spirits are listening" | piper --model voices/en_GB-alba-medium.onnx --length-scale 1.2 --output-raw | aplay -r 22050 -f S16_LE
+python .planning/test_microphone.py       # Mic input test
+```
+
+**Windows (PowerShell):**
+```powershell
+# Validate persona files (fast, no heavy dependencies)
+venv\Scripts\python crystal_ball.py --validate-persona zelda
+
+# Test all components at once
+venv\Scripts\python test_components.py
+
+# Or test individually:
+ollama run llama3.2:3b "Say hello in a spooky voice"
+echo "The spirits are listening" | piper --model voices/en_GB-alba-medium.onnx --length-scale 1.2 --output_file test.wav
+# Then play test.wav with your default media player, or:
+# [System.Media.SoundPlayer]::new("test.wav").PlaySync()
 python .planning/test_microphone.py       # Mic input test
 ```
 
@@ -170,6 +255,7 @@ python .planning/test_microphone.py       # Mic input test
 | `1.4` | Dramatic |
 | `1.6` | Maximum spookiness |
 
+**Linux / macOS:**
 ```bash
 # Compare all downloaded voices
 TEXT="The mists swirl... I see a journey in your future."
@@ -177,6 +263,17 @@ for voice in voices/*.onnx; do
   echo "--- $voice ---"
   echo "$TEXT" | piper --model "$voice" --length-scale 1.2 --output-raw | aplay -r 22050 -f S16_LE
 done
+```
+
+**Windows (PowerShell):**
+```powershell
+# Compare all downloaded voices
+$text = "The mists swirl... I see a journey in your future."
+foreach ($voice in Get-ChildItem voices\*.onnx) {
+  Write-Host "--- $($voice.Name) ---"
+  echo $text | piper --model $voice.FullName --length-scale 1.2 --output_file test.wav
+  [System.Media.SoundPlayer]::new("$PWD\test.wav").PlaySync()
+}
 ```
 
 ### Selecting a Microphone
@@ -210,6 +307,8 @@ sudo usermod -aG input $USER
 Or create a udev rule for your specific device.
 
 **Dependency:** The wake trigger uses the `evdev` Python package (`pip install evdev`), which is Linux-only. It is only imported when `--wake-device` is used or `--list-input-devices` is called.
+
+**Windows:** The `--wake-device` and `--list-input-devices` flags are not available on Windows. Use the default stdin wake trigger (press Enter) instead.
 
 ### Session Management
 
@@ -310,7 +409,9 @@ Serial (Arduino/Pico) controllers are also supported via `--led-type serial`. Se
 | Ollama connection refused | Run `ollama serve`; verify with `curl http://localhost:11434/api/tags` |
 | Missing voice models | See [Download Voice Models](#5-download-voice-models) above |
 | Wake trigger permission denied | Add user to `input` group: `sudo usermod -aG input $USER` then re-login |
-| evdev not installed | `pip install evdev` (only needed for `--wake-device`) |
+| evdev not installed | `pip install evdev` (only needed for `--wake-device`, Linux-only) |
+| Ollama slow on AMD GPU (Windows) | Set `OLLAMA_VULKAN=1` as a user environment variable and restart Ollama |
+| `piper` not found (Windows) | Ensure venv is activated; run as `venv\Scripts\piper` or `python -m piper` |
 
 ## Project Structure
 
