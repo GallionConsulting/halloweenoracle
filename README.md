@@ -30,14 +30,15 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 
 | Persona | Character | Style |
 |---------|-----------|-------|
-| **zelda** (default) | Madam Zelda | Playfully spooky, warm, British accent |
+| **voss** (default) | Madam Voss | Playfully spooky, warm, British accent |
 | **mordecai** | Baron Mordecai | Brooding, ominous, grave baritone |
+| **barnacle** | Captain Barnacle | Salty sea captain, gruff, pirate-adjacent |
 
 ## Quick Start
 
 **Linux / macOS:**
 ```bash
-./run.sh                              # Default (Madam Zelda, stdin wake trigger)
+./run.sh                              # Default (Madam Voss, stdin wake trigger)
 ./run.sh --persona mordecai           # Baron Mordecai
 ./run.sh --wake-device /dev/input/event5  # Wake on USB button/keyboard press
 ./run.sh --max-questions 5            # 5 questions per session
@@ -48,7 +49,7 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 
 **Windows (PowerShell):**
 ```powershell
-venv\Scripts\python crystal_ball.py --debug                          # Default (Madam Zelda, stdin wake trigger)
+venv\Scripts\python crystal_ball.py --debug                          # Default (Madam Voss, stdin wake trigger)
 venv\Scripts\python crystal_ball.py --debug --persona mordecai       # Baron Mordecai
 venv\Scripts\python crystal_ball.py --debug --max-questions 5        # 5 questions per session
 venv\Scripts\python crystal_ball.py --debug --model mistral          # Use Mistral 7B instead of Llama 3.2
@@ -151,11 +152,11 @@ For each voice, you need **both** the `.onnx` model file and its `.onnx.json` co
 mkdir -p voices
 cd voices
 
-# Default voice for Madam Zelda
+# Default voice for Madam Voss
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx.json
 
-# Default voice for Baron Mordecai (multi-speaker, uses speaker 2 "obadiah")
+# Default voice for Baron Mordecai and Captain Barnacle (multi-speaker)
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx.json
 
@@ -167,11 +168,11 @@ cd ..
 New-Item -ItemType Directory -Force -Path voices
 cd voices
 
-# Default voice for Madam Zelda
+# Default voice for Madam Voss
 Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx" -OutFile "en_GB-alba-medium.onnx"
 Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx.json" -OutFile "en_GB-alba-medium.onnx.json"
 
-# Default voice for Baron Mordecai (multi-speaker, uses speaker 2 "obadiah")
+# Default voice for Baron Mordecai and Captain Barnacle (multi-speaker)
 Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx" -OutFile "en_GB-semaine-medium.onnx"
 Invoke-WebRequest -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx.json" -OutFile "en_GB-semaine-medium.onnx.json"
 
@@ -182,8 +183,8 @@ cd ..
 
 | Voice | Description | Used By |
 |-------|-------------|---------|
-| `en_GB-alba-medium` | British female, warm | Madam Zelda (default) |
-| `en_GB-semaine-medium` | British RP, multi-speaker (obadiah = speaker 2) | Baron Mordecai (default) |
+| `en_GB-alba-medium` | British female, warm | Madam Voss (default) |
+| `en_GB-semaine-medium` | British RP, multi-speaker | Baron Mordecai (speaker 2 "obadiah"), Captain Barnacle (speaker 1 "spike") |
 | `en_GB-jenny_dioco-medium` | British female, expressive | Optional |
 | `en_GB-northern_english_male-medium` | Northern English male, deep | Optional |
 | `en_GB-alan-medium` | British male | Optional |
@@ -194,7 +195,7 @@ cd ..
 **Linux / macOS:**
 ```bash
 # Validate persona files (fast, no heavy dependencies)
-venv/bin/python3 crystal_ball.py --validate-persona zelda
+venv/bin/python3 crystal_ball.py --validate-persona voss
 
 # Test all components at once
 venv/bin/python3 test_components.py
@@ -208,7 +209,7 @@ python .planning/test_microphone.py       # Mic input test
 **Windows (PowerShell):**
 ```powershell
 # Validate persona files (fast, no heavy dependencies)
-venv\Scripts\python crystal_ball.py --validate-persona zelda
+venv\Scripts\python crystal_ball.py --validate-persona voss
 
 # Test all components at once
 venv\Scripts\python test_components.py
@@ -224,7 +225,7 @@ python .planning/test_microphone.py       # Mic input test
 ## Usage Options
 
 ```
---persona NAME/PATH       Fortune teller persona name or path to YAML file (default: zelda)
+--persona NAME/PATH       Fortune teller persona name or path to YAML file (default: voss)
 --model MODEL             Ollama model (overrides persona default)
 --whisper-model MODEL     Whisper model size (overrides persona default)
 --voice VOICE             Piper voice model path (overrides persona default)
@@ -342,7 +343,7 @@ Persona YAML values are used as defaults and can be overridden by CLI flags.
 Personas are defined in YAML files in the `personas/` directory. To create a new one, copy an existing file and edit it:
 
 ```bash
-cp personas/zelda.yaml personas/witch.yaml
+cp personas/voss.yaml personas/witch.yaml
 # Edit personas/witch.yaml with your character's details
 ./run.sh --persona witch
 ```
@@ -359,7 +360,7 @@ Validate your persona file before running (checks for YAML syntax errors, missin
 ./run.sh --validate-persona witch
 ```
 
-Each persona YAML controls the character's identity, voice, LLM settings, system prompt, filler phrases, and all UI messages. See `personas/zelda.yaml` for the full schema.
+Each persona YAML controls the character's identity, voice, LLM settings, system prompt, filler phrases, and all UI messages. See `personas/voss.yaml` for the full schema.
 
 ### LED Strip Integration
 
@@ -425,8 +426,9 @@ halloweenoracle/
 ├── test_components.py        # Verify all components work
 ├── voices/                   # Piper TTS voice models (not in repo, see install step 5)
 ├── personas/                 # Persona definitions (YAML)
-│   ├── zelda.yaml            # Madam Zelda (default)
-│   └── mordecai.yaml         # Baron Mordecai
+│   ├── voss.yaml             # Madam Voss (default)
+│   ├── mordecai.yaml         # Baron Mordecai
+│   └── barnacle.yaml         # Captain Barnacle
 └── .planning/
     ├── requirements.txt      # Python dependencies
     ├── test_microphone.py    # Audio device testing
