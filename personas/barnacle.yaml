@@ -5,7 +5,7 @@ init_label: "CAPTAIN BARNACLE'S CRYSTAL BALL"
 
 # Voice
 voice: "voices/en_GB-semaine-medium.onnx"
-speaker: 3  # spike
+speaker: 1  # spike
 length_scale: 1.1
 sentence_silence: 0.3
 
@@ -54,11 +54,11 @@ fillers:
 # UI messages (shown in terminal / spoken on events)
 messages:
   consulting: "Consulting the depths..."
-  no_speech: "The seas were too rough to hear ye. Speak up, matey!"
+  no_speech: "The seas were too rough to hear ye. Speak up matey!"
   next_question: "The crystal compass awaits your next question."
   awaiting: "{name} awaits your question..."
   speak_now: "(Speak now)"
-  session_end: "The tide is goin' out, matey. Return again and Captain Barnacle will chart yer course!"
+  session_end: "The tide is goin' out. Return again and Captain Barnacle will chart yer course!"
   departed: "{name} sails into the fog..."
-  llm_error: "The seas are too stormy to see clearly. Ask again, matey!"
+  llm_error: "The seas are too stormy to see clearly. Ask again matey!"
   interrupted: "Man overboard! The séance has been interrupted..."
