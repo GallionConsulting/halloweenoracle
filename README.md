@@ -329,10 +329,10 @@ Persona YAML values are used as defaults and can be overridden by CLI flags.
 | Model | RAM | Notes |
 |-------|-----|-------|
 | **llama3.2:3b** | ~2GB | Default, fast |
+| phi4-mini | ~2.5GB | Strong reasoning for its size |
+| gemma3:4b | ~3GB | Good balance of quality and speed |
 | mistral | ~4GB | Higher quality |
-| phi3 | ~2GB | Alternative small model |
 | qwen3:8b | ~5GB | Strong reasoning & multilingual |
-| gemma3n | ~5GB | Efficient on-device performance |
 | llama3.1:8b | ~5GB | Best quality, slower |
 
 ## Customization
