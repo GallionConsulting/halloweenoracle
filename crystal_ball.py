@@ -8,8 +8,9 @@ A standalone interactive fortune teller using:
 - Piper for text-to-speech
 
 Usage:
-    python crystal_ball.py
-    python crystal_ball.py --model llama3.2:3b --debug
+    python crystal_ball.py voss              # load by name
+    python crystal_ball.py personas/voss.yaml  # load by path
+    python crystal_ball.py                   # interactive prompt
 """
 
 import argparse
@@ -940,15 +941,14 @@ class CrystalBall:
 
 
 def main():
-    available = list_available_personas()
-    persona_list = ", ".join(available) if available else "(none found)"
     parser = argparse.ArgumentParser(
         description="Crystal Ball - AI Fortune Teller"
     )
     parser.add_argument(
-        '--persona',
-        default='zelda',
-        help=f'Fortune teller persona name or path to YAML file ({persona_list})'
+        'persona',
+        nargs='?',
+        default=None,
+        help='Fortune teller persona name or path to YAML file'
     )
     parser.add_argument(
         '--whisper-model',
@@ -1068,7 +1068,47 @@ def main():
         print(f"Persona '{persona['name']}' ({args.validate_persona}) is valid.")
         sys.exit(0)
 
-    # Load persona and apply CLI overrides
+    # Load persona — prompt interactively if not specified
+    if args.persona is None:
+        available = list_available_personas()
+        if not available:
+            print(f"No persona files found in {PERSONAS_DIR}")
+            print("Create a persona YAML file in the personas/ directory.")
+            sys.exit(1)
+        if len(available) == 1:
+            print(f"Using persona: {available[0]}")
+            args.persona = available[0]
+        else:
+            print("\nAvailable personas:")
+            for i, name in enumerate(available, 1):
+                print(f"  {i}. {name}")
+            print()
+            while True:
+                try:
+                    choice = input("Select persona (number or name): ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print()
+                    sys.exit(0)
+                if not choice:
+                    continue
+                # Try as number
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(available):
+                        args.persona = available[idx]
+                        break
+                except ValueError:
+                    pass
+                # Try as name
+                if choice in available:
+                    args.persona = choice
+                    break
+                # Try as path
+                if Path(choice).is_file():
+                    args.persona = choice
+                    break
+                print(f"  Unknown selection: {choice}")
+
     persona = load_persona(args.persona)
     if args.voice is not None:
         persona["voice"] = args.voice

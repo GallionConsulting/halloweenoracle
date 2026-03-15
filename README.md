@@ -30,7 +30,7 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 
 | Persona | Character | Style |
 |---------|-----------|-------|
-| **voss** (default) | Madam Voss | Playfully spooky, warm, British accent |
+| **voss** | Madam Voss | Playfully spooky, warm, British accent |
 | **mordecai** | Baron Mordecai | Brooding, ominous, grave baritone |
 | **barnacle** | Captain Barnacle | Salty sea captain, gruff, pirate-adjacent |
 
@@ -38,23 +38,25 @@ Expected end-to-end latency is 2-4 seconds — a natural "communing with the spi
 
 **Linux / macOS:**
 ```bash
-./run.sh                              # Default (Madam Voss, stdin wake trigger)
-./run.sh --persona mordecai           # Baron Mordecai
-./run.sh --wake-device /dev/input/event5  # Wake on USB button/keyboard press
-./run.sh --max-questions 5            # 5 questions per session
-./run.sh --model mistral              # Use Mistral 7B instead of Llama 3.2
-./run.sh --length-scale 1.4           # Slower, more dramatic speech
-./run.sh --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
+./run.sh                              # Interactive persona selection
+./run.sh voss                         # Madam Voss by name
+./run.sh personas/mordecai.yaml       # Baron Mordecai by path
+./run.sh barnacle --wake-device /dev/input/event5  # Wake on USB button/keyboard press
+./run.sh voss --max-questions 5       # 5 questions per session
+./run.sh voss --model mistral         # Use Mistral 7B instead of Llama 3.2
+./run.sh voss --length-scale 1.4      # Slower, more dramatic speech
+./run.sh voss --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
 ```
 
 **Windows (PowerShell):**
 ```powershell
-venv\Scripts\python crystal_ball.py --debug                          # Default (Madam Voss, stdin wake trigger)
-venv\Scripts\python crystal_ball.py --debug --persona mordecai       # Baron Mordecai
-venv\Scripts\python crystal_ball.py --debug --max-questions 5        # 5 questions per session
-venv\Scripts\python crystal_ball.py --debug --model mistral          # Use Mistral 7B instead of Llama 3.2
-venv\Scripts\python crystal_ball.py --debug --length-scale 1.4       # Slower, more dramatic speech
-venv\Scripts\python crystal_ball.py --debug --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
+venv\Scripts\python crystal_ball.py --debug                          # Interactive persona selection
+venv\Scripts\python crystal_ball.py --debug voss                     # Madam Voss by name
+venv\Scripts\python crystal_ball.py --debug mordecai                 # Baron Mordecai
+venv\Scripts\python crystal_ball.py --debug voss --max-questions 5   # 5 questions per session
+venv\Scripts\python crystal_ball.py --debug voss --model mistral     # Use Mistral 7B instead of Llama 3.2
+venv\Scripts\python crystal_ball.py --debug voss --length-scale 1.4  # Slower, more dramatic speech
+venv\Scripts\python crystal_ball.py --debug voss --led-type wled --wled-host 192.168.4.1  # Enable WLED LEDs
 ```
 
 > **Note:** The `--wake-device` flag uses `evdev`, which is Linux-only. On Windows, use the default stdin wake trigger (press Enter to wake).
@@ -225,7 +227,7 @@ python .planning/test_microphone.py       # Mic input test
 ## Usage Options
 
 ```
---persona NAME/PATH       Fortune teller persona name or path to YAML file (default: voss)
+PERSONA                   Fortune teller persona name or path to YAML file (omit for interactive selection)
 --model MODEL             Ollama model (overrides persona default)
 --whisper-model MODEL     Whisper model size (overrides persona default)
 --voice VOICE             Piper voice model path (overrides persona default)
@@ -345,13 +347,13 @@ Personas are defined in YAML files in the `personas/` directory. To create a new
 ```bash
 cp personas/voss.yaml personas/witch.yaml
 # Edit personas/witch.yaml with your character's details
-./run.sh --persona witch
+./run.sh witch
 ```
 
 You can also load a persona from any path:
 
 ```bash
-./run.sh --persona /path/to/custom.yaml
+./run.sh /path/to/custom.yaml
 ```
 
 Validate your persona file before running (checks for YAML syntax errors, missing fields, wrong types, bad message placeholders, and missing voice files):
@@ -426,7 +428,7 @@ halloweenoracle/
 ├── test_components.py        # Verify all components work
 ├── voices/                   # Piper TTS voice models (not in repo, see install step 5)
 ├── personas/                 # Persona definitions (YAML)
-│   ├── voss.yaml             # Madam Voss (default)
+│   ├── voss.yaml             # Madam Voss
 │   ├── mordecai.yaml         # Baron Mordecai
 │   └── barnacle.yaml         # Captain Barnacle
 └── .planning/
